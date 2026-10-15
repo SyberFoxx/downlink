@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.4.1**
+- Versión actual: **0.5.0**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -20,7 +20,7 @@ App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una U
 | Backend | Rust (edition 2024, tokio, serde) |
 | Motor | yt-dlp + ffmpeg (binarios del sistema) |
 
-Estado de navegación: **no hay rutas de SvelteKit en uso**. La app cambia de vista con un estado `view` en `src/routes/+page.svelte` (`"downloads" | "settings"`). No agregues rutas nuevas sin discutirlo.
+Estado de navegación: **no hay rutas de SvelteKit en uso**. La app cambia de vista con un estado `view` en `src/routes/+page.svelte` (`"descargas" | "historial" | "ajustes"`). No agregues rutas nuevas sin discutirlo.
 
 ## Estructura
 
@@ -28,7 +28,7 @@ Estado de navegación: **no hay rutas de SvelteKit en uso**. La app cambia de vi
 downlink/
 ├── src/                         # Frontend
 │   ├── routes/
-│   │   ├── +page.svelte         # Layout + switch de vistas (Descargas / Ajustes)
+│   │   ├── +page.svelte         # Layout + switch de vistas (Descargas / Historial / Ajustes)
 │   │   ├── +layout.svelte
 │   │   └── +layout.ts           # ssr = false, prerender
 │   ├── lib/
@@ -45,6 +45,7 @@ downlink/
 │   │   │   └── DownloadRow.svelte   # Fila de un trabajo (estados y acciones)
 │   │   └── views/
 │   │       ├── DownloadsView.svelte # URL, probe, opciones, cola, pegado/arrastre
+│   │       ├── HistoryView.svelte   # Galería del historial, búsqueda, re-descarga
 │   │       └── SettingsView.svelte  # Cookies, concurrencia, motor, probar conexión
 │   └── app.css                  # Tailwind + base oscura
 ├── src-tauri/
@@ -52,6 +53,7 @@ downlink/
 │   │   ├── main.rs              # Entry point
 │   │   ├── lib.rs               # Builder, comandos Tauri, estado, workaround Wayland
 │   │   ├── queue.rs             # Cola de trabajos (estados, concurrencia, pausa, orden)
+│   │   ├── history.rs           # Historial persistido (history.json), dedupe por enlace
 │   │   ├── settings.rs          # Settings persistidos, detección de navegadores, EngineInfo
 │   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
 │   ├── Cargo.toml
@@ -95,12 +97,14 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
 
 | Comando | Entrada | Salida |
 |---|---|---|
-| `probe_url` | `url` | `ProbeInfo` (`kind`: `video`/`playlist`, `heights`, `entries`) |
-| `start_download` | `url`, `title`, `options` | `job_id: u64` (añade a la cola) |
+| `probe_url` | `url` | `ProbeInfo` (`kind`: `video`/`playlist`, `heights`, `entries`, `truncated`) |
+| `start_download` | `url`, `title`, `thumbnail`, `options` | `job_id: u64` (añade a la cola) |
 | `pause_download` / `resume_download` / `cancel_download` | `id` | — |
 | `reorder_queue` | `ids: Vec<u64>` | — (reordena los pendientes) |
 | `clear_finished` | — | — (quita los terminados) |
 | `get_queue` | — | `Vec<JobView>` |
+| `get_history` | — | `Vec<HistoryEntry>` (más reciente primero) |
+| `remove_history` / `clear_history` | `url` / — | — |
 | `get_settings` / `save_settings` | `settings` | `Settings` |
 | `detect_browsers` | — | `BrowserInfo[]` |
 | `engine_info` | — | `EngineInfo` (yt-dlp, runtime JS, ffmpeg) |
@@ -123,7 +127,7 @@ Canal único `queue-updated` (`QUEUE_EVENT`) con **la lista completa** de trabaj
 (`Vec<JobView>`): el frontend la sustituye entera, sin fusionar.
 
 ```jsonc
-{ "id": 1, "url": "…", "title": "…", "options": { … },
+{ "id": 1, "url": "…", "title": "…", "thumbnail": "https://…", "options": { … },
   "status": "queued | downloading | processing | paused | done | error | cancelled",
   "percent": 42.5, "downloadedBytes": 123, "totalBytes": 456, "speedBps": 789,
   "etaSecs": 10, "filePath": "/home/…/video.mp4", "message": null }
@@ -156,6 +160,16 @@ Dos salvaguardas en `playlist_entries` / `probe_args`:
 La selección en el frontend es **por índice** (`Set<number>`), no por id, para no
 depender de que los ids sean únicos.
 
+### Historial (`history.rs`)
+
+Al terminar con éxito un trabajo, `queue.rs` (`finish`) guarda un `HistoryEntry`
+en `HistoryState`: `url` (identidad), `title`, `thumbnail`, `filePath`, `options`,
+`sizeBytes` y `finishedAt` (millis). Se persiste en `history.json` dentro de
+`app_config_dir()` (máx. 500 entradas, **dedupe por `url`**: re-descargar mueve la
+entrada al frente en lugar de duplicarla). La miniatura llega desde el frontend vía
+`start_download` (viaja en `JobView.thumbnail`). La vista `HistoryView.svelte` muestra
+la galería, busca y re-descarga reutilizando las `options` guardadas.
+
 ### Esquema de argumentos
 
 `build_download_args(settings, url, options)` arma todo. Los argumentos comunes (`common_args`) añaden cookies, runtime JS y EJS. `--ignore-config` **siempre** se pasa: se ignora el `yt-dlp.conf` del usuario a propósito.
@@ -179,7 +193,7 @@ depender de que los ids sean únicos.
 - **YouTube anti-bot**: requiere cookies + runtime JS (node/deno) + solver EJS (`--remote-components ejs:github`, solo en dominios de YouTube). Los errores se traducen a mensajes que apuntan a Ajustes.
 - **ffmpeg**: obligatorio para convertir formatos y aplicar filtros de audio.
 - Variables de entorno útiles (override, sobre todo en tests): `DOWNLINK_YTDLP` (ruta del binario), `DOWNLINK_JS_RUNTIME` (runtime forzado), `WEBKIT_DISABLE_DMABUF_RENDERER`.
-- **Config y ajustes persistidos**: `settings.json` dentro de `app_config_dir()` (en Linux, `~/.config/<bundle-id>/`).
+- **Config y ajustes persistidos**: `settings.json` y `history.json` dentro de `app_config_dir()` (en Linux, `~/.config/<bundle-id>/`).
 - Los archivos se descargan en `download_dir()` con patrón `%(title)s [%(id)s].%(ext)s`.
 - **`dragDropEnabled: false`** en `tauri.conf.json`: con el drop nativo de Tauri activo el
   webview no dispara el drag & drop HTML5 interno (rompe el reordenamiento de la cola, sobre
@@ -212,7 +226,7 @@ Resumen:
 - **v0.2** ✅ — selector de formatos, contenedores, formatos de audio, volumen/normalización, presets.
 - **v0.3** ✅ — cola inteligente: concurrencia, pausa/reanudar, reordenar arrastrando, pegado múltiple.
 - **v0.4** ✅ — playlists: detección, listado, selección y encolado.
-- **v0.5** — historial con galería, búsqueda y re-descarga + persistencia local.
+- **v0.5** ✅ — historial con galería, búsqueda y re-descarga + persistencia local.
 - **v0.6** — recorte de clips (`--download-sections`) y subtítulos.
 - **v0.7** — madurez: tema claro, sidecars (empaquetar yt-dlp/ffmpeg) + auto-update, tray, instaladores.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.

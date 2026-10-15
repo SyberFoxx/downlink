@@ -1,3 +1,4 @@
+mod history;
 mod queue;
 mod settings;
 mod ytdlp;
@@ -6,6 +7,7 @@ use std::sync::Arc;
 
 use tauri::{Manager, State};
 
+use history::HistoryState;
 use queue::{JobView, Queue};
 use settings::{Settings, SettingsState};
 use ytdlp::DownloadOptions;
@@ -39,6 +41,7 @@ async fn start_download(
     app: tauri::AppHandle,
     url: String,
     title: Option<String>,
+    thumbnail: Option<String>,
     options: DownloadOptions,
 ) -> Result<u64, String> {
     let settings = app.state::<SettingsState>().0.lock().await.clone();
@@ -47,7 +50,9 @@ async fn start_download(
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
         .unwrap_or_else(|| url.clone());
-    Ok(queue.enqueue(&settings, url, title, options).await)
+    Ok(queue
+        .enqueue(&settings, url, title, thumbnail, options)
+        .await)
 }
 
 /// Pausa un trabajo en curso.
@@ -90,6 +95,26 @@ async fn clear_finished(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn get_queue(state: State<'_, QueueState>) -> Result<Vec<JobView>, String> {
     Ok(state.0.snapshot().await)
+}
+
+/// Historial de descargas completadas, de la más reciente a la más antigua.
+#[tauri::command]
+async fn get_history(app: tauri::AppHandle) -> Result<Vec<history::HistoryEntry>, String> {
+    Ok(app.state::<HistoryState>().list().await)
+}
+
+/// Quita una descarga del historial (por su URL).
+#[tauri::command]
+async fn remove_history(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    app.state::<HistoryState>().remove(&app, &url).await;
+    Ok(())
+}
+
+/// Vacía el historial por completo.
+#[tauri::command]
+async fn clear_history(app: tauri::AppHandle) -> Result<(), String> {
+    app.state::<HistoryState>().clear(&app).await;
+    Ok(())
 }
 
 /// Configuración actual.
@@ -136,6 +161,9 @@ pub fn run() {
             let settings = settings::load(app.handle());
             let concurrency = settings.concurrency as usize;
             app.manage(SettingsState(tokio::sync::Mutex::new(settings)));
+            app.manage(HistoryState(tokio::sync::Mutex::new(history::load(
+                app.handle(),
+            ))));
             app.manage(QueueState(Arc::new(Queue::new(
                 app.handle().clone(),
                 concurrency,
@@ -151,6 +179,9 @@ pub fn run() {
             reorder_queue,
             clear_finished,
             get_queue,
+            get_history,
+            remove_history,
+            clear_history,
             get_settings,
             save_settings,
             detect_browsers,

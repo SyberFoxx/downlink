@@ -5,6 +5,7 @@ import type {
   BrowserInfo,
   DownloadOptions,
   EngineInfo,
+  HistoryEntry,
   ProbeInfo,
   QueueJob,
   Settings,
@@ -18,8 +19,9 @@ export function startDownload(
   url: string,
   title: string | null,
   options: DownloadOptions,
+  thumbnail: string | null = null,
 ): Promise<number> {
-  return invoke<number>("start_download", { url, title, options });
+  return invoke<number>("start_download", { url, title, thumbnail, options });
 }
 
 export function pauseDownload(jobId: number): Promise<void> {
@@ -50,6 +52,18 @@ export function onQueueUpdated(
   callback: (jobs: QueueJob[]) => void,
 ): Promise<() => void> {
   return listen<QueueJob[]>("queue-updated", (event) => callback(event.payload));
+}
+
+export function getHistory(): Promise<HistoryEntry[]> {
+  return invoke<HistoryEntry[]>("get_history");
+}
+
+export function removeHistory(url: string): Promise<void> {
+  return invoke<void>("remove_history", { url });
+}
+
+export function clearHistory(): Promise<void> {
+  return invoke<void>("clear_history");
 }
 
 export function getSettings(): Promise<Settings> {

@@ -29,8 +29,9 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 | Selector de formatos visual | ✅ | ❌ | ⚠️ |
 | Presets de un click | ✅ | ❌ | ✅ |
 | Cola con drag & drop | ✅ | ❌ | ❌ |
-| Recorte de clips | ✅ | ❌ | ✅ |
-| Auto-update de yt-dlp | ✅ | ❌ | ✅ |
+| Historial con galería | ✅ | ⚠️ básico | ✅ |
+| Recorte de clips | 🚧 planeado | ❌ | ✅ |
+| Auto-update de yt-dlp | 🚧 planeado | ❌ | ✅ |
 
 ## Características
 
@@ -42,6 +43,12 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 - 🎬 **Playlists y canales** — lista todos los vídeos, elige cuáles y van a la cola de golpe
 - 🔢 **Concurrencia configurable** — de 1 a 8 descargas simultáneas según tu conexión
 - 📂 **Mostrar en la carpeta** — un click para abrir el archivo terminado
+
+### Historial
+- 🖼️ **Galería de descargas** — cada descarga completada se guarda con su miniatura, fecha, tamaño y opciones
+- 🔍 **Búsqueda instantánea** — filtra por título o enlace entre todas tus descargas
+- ♻️ **Re-descarga en un click** — repite una descarga con las mismas opciones de la primera vez
+- 💾 **Persistencia local** — el historial vive en tu equipo y sobrevive al reinicio
 
 ### Formatos y audio
 - 🎞️ **Selector de formatos visual** — resoluciones reales del enlace, contenedores MP4/MKV/WEBM
@@ -55,7 +62,7 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 - 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
 - 🔧 **Estado del motor** — yt-dlp, runtime JS y ffmpeg detectados y probados desde Ajustes
 
-En el [roadmap](#roadmap): historial con galería, recorte de clips, subtítulos, tema claro y auto-update de yt-dlp.
+En el [roadmap](#roadmap): recorte de clips, subtítulos, tema claro y auto-update de yt-dlp.
 
 ## Tech Stack
 
@@ -123,7 +130,11 @@ downlink/
 ├── src-tauri/            # Backend Rust
 │   ├── src/
 │   │   ├── main.rs       # Entry point
-│   │   └── lib.rs        # Setup de Tauri, comandos, gestión de jobs
+│   │   ├── lib.rs        # Setup de Tauri, comandos, gestión de jobs
+│   │   ├── queue.rs      # Cola de descargas (estados, concurrencia, orden)
+│   │   ├── history.rs    # Historial persistido (history.json)
+│   │   ├── settings.rs   # Ajustes persistidos y detección de navegadores
+│   │   └── ytdlp.rs      # Argumentos, probe y parser de yt-dlp
 │   ├── Cargo.toml
 │   └── tauri.conf.json   # Configuración de ventana, bundle, etc.
 └── .github/workflows/    # CI (Linux + Windows)
@@ -158,9 +169,9 @@ downlink/
 - [x] Selección individual, todos o ninguno
 - [x] Encolar los vídeos elegidos de golpe
 
-### v0.5 — Historial
-- [ ] Historial con galería, búsqueda y re-descarga
-- [ ] Persistencia local de lo descargado
+### v0.5 — Historial ✅
+- [x] Historial con galería, búsqueda y re-descarga
+- [x] Persistencia local de lo descargado
 
 ### v0.6 — Recorte y subtítulos
 - [ ] Recorte de clips (`--download-sections`)

@@ -8,7 +8,7 @@
 
   const items = [
     { id: "descargas", label: "Descargas" },
-    { id: "historial", label: "Historial", soon: true },
+    { id: "historial", label: "Historial" },
     { id: "ajustes", label: "Ajustes" },
   ];
 </script>
@@ -29,23 +29,15 @@
         class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors {view ===
         item.id
           ? 'bg-gray-900 text-gray-100'
-          : 'text-gray-400 hover:bg-gray-900/50 hover:text-gray-200'} {item.soon
-          ? 'cursor-not-allowed'
-          : ''}"
-        disabled={item.soon}
+          : 'text-gray-400 hover:bg-gray-900/50 hover:text-gray-200'}"
         onclick={() => onNavigate(item.id)}
       >
         {item.label}
-        {#if item.soon}
-          <span class="ml-auto text-[10px] tracking-wide text-gray-600"
-            >próximamente</span
-          >
-        {/if}
       </button>
     {/each}
   </nav>
 
   <div class="mt-auto px-4 py-3 text-[11px] text-gray-600">
-    v0.4.1-dev · potenciado por yt-dlp
+    v0.5.0-dev · potenciado por yt-dlp
   </div>
 </aside>

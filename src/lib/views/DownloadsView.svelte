@@ -120,10 +120,10 @@
         const info = await probeUrl(link);
         if (info.kind === "playlist") {
           for (const entry of info.entries) {
-            await startDownload(entry.url, entry.title, snapshot);
+            await startDownload(entry.url, entry.title, snapshot, entry.thumbnail);
           }
         } else {
-          await startDownload(info.webpageUrl, info.title, snapshot);
+          await startDownload(info.webpageUrl, info.title, snapshot, info.thumbnail);
         }
       } catch (e) {
         errorMessage = extractError(e);
@@ -139,8 +139,20 @@
 
     const targets =
       probe.kind === "playlist"
-        ? probe.entries.filter((_, index) => selectedIndices.has(index))
-        : [{ url: probe.webpageUrl, title: probe.title }];
+        ? probe.entries
+            .filter((_, index) => selectedIndices.has(index))
+            .map((entry) => ({
+              url: entry.url,
+              title: entry.title,
+              thumbnail: entry.thumbnail,
+            }))
+        : [
+            {
+              url: probe.webpageUrl,
+              title: probe.title,
+              thumbnail: probe.thumbnail,
+            },
+          ];
 
     if (targets.length === 0) return;
 
@@ -149,7 +161,12 @@
     const snapshot = $state.snapshot(options);
     try {
       for (const target of targets) {
-        await startDownload(target.url, target.title, snapshot);
+        await startDownload(
+          target.url,
+          target.title,
+          snapshot,
+          target.thumbnail,
+        );
       }
       probe = null;
       url = "";

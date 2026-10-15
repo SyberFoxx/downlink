@@ -51,6 +51,7 @@ export interface QueueJob {
   id: number;
   url: string;
   title: string;
+  thumbnail: string | null;
   options: DownloadOptions;
   status: JobStatus;
   percent: number | null;
@@ -60,6 +61,18 @@ export interface QueueJob {
   etaSecs: number | null;
   filePath: string | null;
   message: string | null;
+}
+
+/** Una descarga completada, guardada en el historial. */
+export interface HistoryEntry {
+  url: string;
+  title: string;
+  thumbnail: string | null;
+  filePath: string | null;
+  options: DownloadOptions;
+  sizeBytes: number | null;
+  /** Milisegundos desde el epoch. */
+  finishedAt: number;
 }
 
 export type CookiesMode = "none" | "browser" | "file";

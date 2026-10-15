@@ -8,6 +8,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdout};
 use tokio::sync::Mutex;
 
+use crate::history::{HistoryEntry, HistoryState};
 use crate::settings::{Settings, SettingsState};
 use crate::ytdlp::{self, DownloadOptions};
 
@@ -53,6 +54,7 @@ pub struct JobView {
     pub id: u64,
     pub url: String,
     pub title: String,
+    pub thumbnail: Option<String>,
     pub options: DownloadOptions,
     pub status: JobStatus,
     pub percent: Option<f64>,
@@ -65,11 +67,18 @@ pub struct JobView {
 }
 
 impl JobView {
-    fn new(id: u64, url: String, title: String, options: DownloadOptions) -> Self {
+    fn new(
+        id: u64,
+        url: String,
+        title: String,
+        thumbnail: Option<String>,
+        options: DownloadOptions,
+    ) -> Self {
         Self {
             id,
             url,
             title,
+            thumbnail,
             options,
             status: JobStatus::Queued,
             percent: None,
@@ -168,13 +177,16 @@ impl Queue {
         settings: &Settings,
         url: String,
         title: String,
+        thumbnail: Option<String>,
         options: DownloadOptions,
     ) -> u64 {
         let id = {
             let mut inner = self.inner.lock().await;
             inner.next_id += 1;
             let id = inner.next_id;
-            inner.jobs.push(JobView::new(id, url, title, options));
+            inner
+                .jobs
+                .push(JobView::new(id, url, title, thumbnail, options));
             id
         };
         self.pump(settings.clone()).await;
@@ -410,6 +422,7 @@ impl Queue {
         drop(child);
 
         // 2) Fija el estado final (salvo si un comando ya lo dejó terminal).
+        let mut completed: Option<HistoryEntry> = None;
         {
             let mut inner = self.inner.lock().await;
             let Some(job) = inner.jobs.iter_mut().find(|j| j.id == id) else {
@@ -426,6 +439,13 @@ impl Queue {
                 job.speed_bps = None;
                 job.eta_secs = None;
                 job.file_path = final_path;
+                completed = Some(HistoryEntry::new(
+                    job.url.clone(),
+                    job.title.clone(),
+                    job.thumbnail.clone(),
+                    job.file_path.clone(),
+                    job.options.clone(),
+                ));
             } else {
                 job.status = JobStatus::Error;
                 job.speed_bps = None;
@@ -434,9 +454,16 @@ impl Queue {
             }
         }
 
+        // 3) Guarda la descarga en el historial.
+        if let Some(entry) = completed
+            && let Some(state) = self.app.try_state::<HistoryState>()
+        {
+            state.record(&self.app, entry).await;
+        }
+
         self.emit().await;
 
-        // 3) Hueco libre: intenta arrancar el siguiente pendiente.
+        // 4) Hueco libre: intenta arrancar el siguiente pendiente.
         let settings = self.current_settings().await;
         self.pump(settings).await;
     }
@@ -460,6 +487,7 @@ mod tests {
             id,
             format!("https://x/{id}"),
             format!("job {id}"),
+            None,
             Default::default(),
         );
         view.status = status;

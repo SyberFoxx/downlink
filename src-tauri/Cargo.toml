@@ -1,6 +1,6 @@
 [package]
 name = "downlink"
-version = "0.4.1"
+version = "0.5.0"
 description = "Descargador de videos y audio multiplataforma con interfaz moderna"
 authors = ["Ramses Sotomayor"]
 edition = "2024"

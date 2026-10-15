@@ -35,3 +35,17 @@ export function formatEta(seconds?: number | null): string {
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
 }
+
+const DATE_FORMAT = new Intl.DateTimeFormat("es", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** Fecha legible a partir de milisegundos desde el epoch. */
+export function formatDate(millis: number): string {
+  if (!Number.isFinite(millis) || millis <= 0) return "--";
+  return DATE_FORMAT.format(new Date(millis));
+}

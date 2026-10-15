@@ -7,6 +7,18 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-15
+
+### Added
+- **Historial con galería**: cada descarga completada se guarda (miniatura, título, fecha, tamaño y resumen de opciones) y se ve en la nueva vista Historial
+- **Búsqueda y re-descarga**: filtra por título o enlace, vuelve a descargar con un click (reutiliza las opciones originales) o abre el archivo en su carpeta
+- **Persistencia local**: el historial se guarda en `history.json` (hasta 500 entradas, sin duplicados por enlace) y sobrevive al reinicio
+- Comando `start_download` acepta la miniatura para mostrarla en la galería
+- 3 tests nuevos del historial (38 en total)
+
+### Changed
+- El sidebar activa la sección **Historial** (antes «próximamente»)
+
 ## [0.4.1] - 2026-10-15
 
 ### Fixed
