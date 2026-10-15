@@ -39,6 +39,7 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 - 📋 **Cola inteligente** — varias descargas a la vez, con pausa y reanudación individual
 - 🧲 **Reordena arrastrando** — el orden en que arrastras los pendientes es el orden en que se descargan
 - 🖱️ **Arrastra enlaces a la ventana** — o pega varios enlaces de golpe con `Ctrl+V`
+- 🎬 **Playlists y canales** — lista todos los vídeos, elige cuáles y van a la cola de golpe
 - 🔢 **Concurrencia configurable** — de 1 a 8 descargas simultáneas según tu conexión
 - 📂 **Mostrar en la carpeta** — un click para abrir el archivo terminado
 
@@ -54,7 +55,7 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 - 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
 - 🔧 **Estado del motor** — yt-dlp, runtime JS y ffmpeg detectados y probados desde Ajustes
 
-En el [roadmap](#roadmap): playlists, recorte de clips, subtítulos, historial, tema claro y auto-update de yt-dlp.
+En el [roadmap](#roadmap): historial con galería, recorte de clips, subtítulos, tema claro y auto-update de yt-dlp.
 
 ## Tech Stack
 
@@ -151,14 +152,22 @@ downlink/
 - [x] Concurrencia configurable (1–8 descargas simultáneas)
 - [x] Pegar varios enlaces a la vez / arrastrarlos a la ventana
 
-### v0.4 — Extras
-- [ ] Playlists y canales (expansión y selección de items)
+### v0.4 — Playlists ✅
+- [x] Detección de playlists y canales al analizar el enlace
+- [x] Lista de vídeos con título y duración
+- [x] Selección individual, todos o ninguno
+- [x] Encolar los vídeos elegidos de golpe
+
+### v0.5 — Historial
+- [ ] Historial con galería, búsqueda y re-descarga
+- [ ] Persistencia local de lo descargado
+
+### v0.6 — Recorte y subtítulos
 - [ ] Recorte de clips (`--download-sections`)
 - [ ] Subtítulos (descarga e incrustado)
-- [ ] Historial con galería y búsqueda
-- [ ] Tema claro
 
-### v0.5 — Madurez
+### v0.7 — Madurez
+- [ ] Tema claro
 - [ ] Empaquetado de yt-dlp/ffmpeg como sidecars + auto-update
 - [ ] System tray con progreso + notificaciones
 - [ ] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS)

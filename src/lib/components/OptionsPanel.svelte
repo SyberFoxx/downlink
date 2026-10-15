@@ -5,6 +5,7 @@
     AUDIO_QUALITIES,
     VIDEO_CONTAINERS,
     PRESETS,
+    availableHeightsFor,
     closestHeight,
     qualityApplies,
     summarizeOptions,
@@ -16,9 +17,20 @@
     options: DownloadOptions;
     onDownload: () => void;
     starting: boolean;
+    /** Texto del botón principal (p. ej. «Descargar 12 vídeos»). */
+    label?: string;
+    /** Deshabilita el botón principal (p. ej. ninguna selección). */
+    disabled?: boolean;
   }
 
-  let { info, options, onDownload, starting }: Props = $props();
+  let {
+    info,
+    options,
+    onDownload,
+    starting,
+    label = "Descargar",
+    disabled = false,
+  }: Props = $props();
 
   let presetIds = $derived([
     "video-1080",
@@ -30,7 +42,8 @@
 
   let activePreset = $state<PresetId | null>(null);
 
-  let resolution1080 = $derived(closestHeight(info.heights, 1080));
+  let heights = $derived(availableHeightsFor(info.heights));
+  let resolution1080 = $derived(closestHeight(heights, 1080));
   let showQuality = $derived(qualityApplies(options));
   let reencodes = $derived(
     options.mode === "video" && (options.volumeDb !== 0 || options.normalizeAudio),
@@ -115,7 +128,7 @@
           class="w-full rounded-lg border border-gray-800 bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none focus:border-violet-600"
         >
           <option value={null}>Mejor disponible</option>
-          {#each info.heights as height (height)}
+          {#each heights as height (height)}
             <option value={height}>{height}p</option>
           {/each}
         </select>
@@ -248,7 +261,7 @@
     <span class="truncate text-xs text-gray-500">{summary}</span>
     <button
       class="flex shrink-0 items-center gap-1.5 rounded-md bg-violet-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm shadow-violet-600/30 transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
-      disabled={starting}
+      disabled={starting || disabled}
       onclick={onDownload}
     >
       <svg
@@ -264,7 +277,7 @@
           d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
         />
       </svg>
-      {starting ? "Iniciando…" : "Descargar"}
+      {starting ? "Iniciando…" : label}
     </button>
   </div>
 </section>

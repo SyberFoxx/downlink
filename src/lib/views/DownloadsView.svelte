@@ -15,6 +15,7 @@
   import type { ProbeInfo, QueueJob } from "$lib/types";
   import PreviewCard from "$lib/components/PreviewCard.svelte";
   import OptionsPanel from "$lib/components/OptionsPanel.svelte";
+  import PlaylistPanel from "$lib/components/PlaylistPanel.svelte";
   import QueueList from "$lib/components/QueueList.svelte";
   import { defaultOptions } from "$lib/options";
   import type { DownloadOptions } from "$lib/types";
@@ -34,6 +35,7 @@
   let options = $state<DownloadOptions>(defaultOptions());
   let adding = $state(0);
   let dropActive = $state(false);
+  let selectedIds = $state<Set<string>>(new Set());
 
   const STATUS_ORDER: Record<QueueJob["status"], number> = {
     downloading: 0,
@@ -62,6 +64,12 @@
     !!errorMessage && /cookies|anti-bot|verificaci|sign in/i.test(errorMessage),
   );
 
+  let downloadLabel = $derived(
+    probe?.kind === "playlist"
+      ? `Descargar ${selectedIds.size} vídeo${selectedIds.size === 1 ? "" : "s"}`
+      : "Descargar",
+  );
+
   function extractError(e: unknown): string {
     if (typeof e === "string") return e;
     if (e instanceof Error) return e.message;
@@ -82,6 +90,10 @@
     probe = null;
     try {
       probe = await probeUrl(target);
+      selectedIds =
+        probe.kind === "playlist"
+          ? new Set(probe.entries.map((entry) => entry.id))
+          : new Set();
     } catch (e) {
       errorMessage = extractError(e);
     } finally {
@@ -106,7 +118,13 @@
     for (const link of urls) {
       try {
         const info = await probeUrl(link);
-        await startDownload(info.webpageUrl, info.title, snapshot);
+        if (info.kind === "playlist") {
+          for (const entry of info.entries) {
+            await startDownload(entry.url, entry.title, snapshot);
+          }
+        } else {
+          await startDownload(info.webpageUrl, info.title, snapshot);
+        }
       } catch (e) {
         errorMessage = extractError(e);
       } finally {
@@ -118,18 +136,44 @@
 
   async function download() {
     if (!probe || starting) return;
+
+    const targets =
+      probe.kind === "playlist"
+        ? probe.entries.filter((entry) => selectedIds.has(entry.id))
+        : [{ url: probe.webpageUrl, title: probe.title }];
+
+    if (targets.length === 0) return;
+
     starting = true;
     errorMessage = null;
     const snapshot = $state.snapshot(options);
     try {
-      await startDownload(probe.webpageUrl, probe.title, snapshot);
+      for (const target of targets) {
+        await startDownload(target.url, target.title, snapshot);
+      }
       probe = null;
       url = "";
+      selectedIds = new Set();
     } catch (e) {
       errorMessage = extractError(e);
     } finally {
       starting = false;
     }
+  }
+
+  function toggleEntry(id: string) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    selectedIds = next;
+  }
+
+  function selectAllEntries() {
+    selectedIds = new Set(probe?.entries.map((entry) => entry.id) ?? []);
+  }
+
+  function selectNoEntries() {
+    selectedIds = new Set();
   }
 
   async function pause(id: number) {
@@ -339,7 +383,23 @@
   {#if probe}
     <div class="mt-6">
       <PreviewCard info={probe} />
-      <OptionsPanel info={probe} {options} onDownload={download} {starting} />
+      {#if probe.kind === "playlist"}
+        <PlaylistPanel
+          entries={probe.entries}
+          selected={selectedIds}
+          onToggle={toggleEntry}
+          onAll={selectAllEntries}
+          onNone={selectNoEntries}
+        />
+      {/if}
+      <OptionsPanel
+        info={probe}
+        {options}
+        onDownload={download}
+        {starting}
+        label={downloadLabel}
+        disabled={probe.kind === "playlist" && selectedIds.size === 0}
+      />
     </div>
   {/if}
 

@@ -46,6 +46,6 @@
   </nav>
 
   <div class="mt-auto px-4 py-3 text-[11px] text-gray-600">
-    v0.3.0-dev · potenciado por yt-dlp
+    v0.4.0-dev · potenciado por yt-dlp
   </div>
 </aside>

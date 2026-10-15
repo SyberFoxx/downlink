@@ -38,10 +38,16 @@
         <span>{info.channel}</span>
         <span class="text-gray-700">·</span>
       {/if}
-      <span>{formatDuration(info.duration)}</span>
-      {#if info.formatsCount > 0}
-        <span class="text-gray-700">·</span>
-        <span>{info.formatsCount} formatos</span>
+      {#if info.kind === "playlist"}
+        <span class="font-medium text-violet-300">
+          Playlist · {info.entries.length} elemento{info.entries.length === 1 ? "" : "s"}
+        </span>
+      {:else}
+        <span>{formatDuration(info.duration)}</span>
+        {#if info.formatsCount > 0}
+          <span class="text-gray-700">·</span>
+          <span>{info.formatsCount} formatos</span>
+        {/if}
       {/if}
       {#if info.extractor}
         <span class="text-gray-700">·</span>

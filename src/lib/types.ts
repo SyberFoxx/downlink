@@ -1,4 +1,15 @@
+export type MediaKind = "video" | "playlist";
+
+export interface PlaylistEntry {
+  id: string;
+  title: string;
+  url: string;
+  duration: number | null;
+  thumbnail: string | null;
+}
+
 export interface ProbeInfo {
+  kind: MediaKind;
   title: string;
   channel: string | null;
   duration: number | null;
@@ -7,6 +18,7 @@ export interface ProbeInfo {
   extractor: string | null;
   formatsCount: number;
   heights: number[];
+  entries: PlaylistEntry[];
 }
 
 export type JobStatus =

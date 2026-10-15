@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.3.0**
+- Versión actual: **0.4.0**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -40,6 +40,7 @@ downlink/
 │   │   │   ├── Sidebar.svelte       # Navegación + versión en el pie
 │   │   │   ├── PreviewCard.svelte   # Metadatos del probe
 │   │   │   ├── OptionsPanel.svelte  # Pestañas Video/Audio, presets, volumen
+│   │   │   ├── PlaylistPanel.svelte # Selección de vídeos de una playlist
 │   │   │   ├── QueueList.svelte     # Sección de cola + drag & drop entre pendientes
 │   │   │   └── DownloadRow.svelte   # Fila de un trabajo (estados y acciones)
 │   │   └── views/
@@ -94,7 +95,7 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
 
 | Comando | Entrada | Salida |
 |---|---|---|
-| `probe_url` | `url` | `ProbeInfo` (metadatos + `heights`) |
+| `probe_url` | `url` | `ProbeInfo` (`kind`: `video`/`playlist`, `heights`, `entries`) |
 | `start_download` | `url`, `title`, `options` | `job_id: u64` (añade a la cola) |
 | `pause_download` / `resume_download` / `cancel_download` | `id` | — |
 | `reorder_queue` | `ids: Vec<u64>` | — (reordena los pendientes) |
@@ -131,9 +132,18 @@ Canal único `queue-updated` (`QUEUE_EVENT`) con **la lista completa** de trabaj
 Se emite como máximo cada 200 ms entre ticks de progreso.
 
 Protocolo de línea sobre stdout de yt-dlp (en `ytdlp.rs` → `parse_line`):
-- `__DL__<descargado>|<total>|<velocidad>|<eta>|<porcentaje>` → progreso
+- `__DL__<descargado>|<total>|<total_estimado>|<velocidad>|<eta>` → progreso (el
+  porcentaje y el ETA se calculan en Rust: `progress.percent` de yt-dlp da `NA`)
 - `__FILE__<ruta>` → ruta final del archivo
 - líneas `[ExtractAudio]`, `[Merger]`, `[Metadata]`… → estado «procesando»
+
+### Playlists
+
+`probe` usa `--flat-playlist` (rápido, sin extraer cada vídeo) y devuelve
+`kind: "playlist"` con `entries` (`id`, `title`, `url`, `duration`, `thumbnail`).
+Las entradas de YouTube solo traen el id, así que `entry_url` construye
+`https://www.youtube.com/watch?v=<id>` cuando la URL no es absoluta. La descarga
+sigue siendo por vídeo suelto (`--no-playlist` en `build_download_args`).
 
 ### Esquema de argumentos
 
@@ -190,8 +200,10 @@ Resumen:
 - **v0.1 / v0.1.1** ✅ — cimientos, cookies del navegador, EJS, vista Ajustes.
 - **v0.2** ✅ — selector de formatos, contenedores, formatos de audio, volumen/normalización, presets.
 - **v0.3** ✅ — cola inteligente: concurrencia, pausa/reanudar, reordenar arrastrando, pegado múltiple.
-- **v0.4** — playlists, recorte de clips (`--download-sections`), subtítulos, historial, tema claro.
-- **v0.5** — sidecars (empaquetar yt-dlp/ffmpeg) + auto-update, system tray, instaladores.
+- **v0.4** ✅ — playlists: detección, listado, selección y encolado.
+- **v0.5** — historial con galería, búsqueda y re-descarga + persistencia local.
+- **v0.6** — recorte de clips (`--download-sections`) y subtítulos.
+- **v0.7** — madurez: tema claro, sidecars (empaquetar yt-dlp/ffmpeg) + auto-update, tray, instaladores.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
 ## Al terminar un cambio

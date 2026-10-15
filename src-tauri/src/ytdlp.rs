@@ -7,7 +7,7 @@ use tokio::process::{Child, ChildStderr, ChildStdout, Command};
 
 use crate::settings::{CookiesMode, EngineInfo, Settings};
 
-const PROGRESS_TEMPLATE: &str = "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.speed)s|%(progress.eta)s|%(progress.percent)s";
+const PROGRESS_TEMPLATE: &str = "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s";
 const FILE_TEMPLATE: &str = "after_move:__FILE__%(filepath)s";
 const JS_RUNTIMES: [&str; 4] = ["deno", "node", "bun", "qjs"];
 const NORMALIZE_FILTER: &str = "loudnorm=I=-16:TP=-1.5:LRA=11";
@@ -238,9 +238,30 @@ pub fn build_download_args(
 // Sondeo de metadatos
 // ---------------------------------------------------------------------------
 
+/// Tipo de contenido detectado al analizar un enlace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MediaKind {
+    Video,
+    Playlist,
+}
+
+/// Un elemento dentro de una playlist.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistEntry {
+    pub id: String,
+    pub title: String,
+    /// URL lista para descargar (nunca relativa).
+    pub url: String,
+    pub duration: Option<f64>,
+    pub thumbnail: Option<String>,
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ProbeInfo {
+    pub kind: MediaKind,
     pub title: String,
     pub channel: Option<String>,
     pub duration: Option<f64>,
@@ -248,8 +269,10 @@ pub struct ProbeInfo {
     pub webpage_url: String,
     pub extractor: Option<String>,
     pub formats_count: usize,
-    /// Resoluciones de video disponibles, de mayor a menor.
+    /// Resoluciones de video disponibles, de mayor a menor (vacío en playlists).
     pub heights: Vec<u32>,
+    /// Elementos de la playlist (vacío si es un video suelto).
+    pub entries: Vec<PlaylistEntry>,
 }
 
 /// Traduce errores de yt-dlp a mensajes accionables para el usuario.
@@ -276,11 +299,12 @@ pub(crate) fn friendly_error(stderr: &str) -> String {
 }
 
 /// Consulta los metadatos de un enlace sin descargar nada.
+/// Usa `--flat-playlist` para listar playlists enteras muy rápido.
 pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> {
     let mut args = common_args(settings, url);
     args.extend([
         "--skip-download".into(),
-        "--no-playlist".into(),
+        "--flat-playlist".into(),
         "--no-warnings".into(),
         "--dump-single-json".into(),
         url.to_string(),
@@ -304,7 +328,14 @@ pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> 
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)
         .map_err(|_| "yt-dlp devolvió una respuesta inválida.".to_string())?;
 
+    let entries = playlist_entries(&json, url);
+
     Ok(ProbeInfo {
+        kind: if entries.is_empty() {
+            MediaKind::Video
+        } else {
+            MediaKind::Playlist
+        },
         title: json
             .get("title")
             .and_then(|v| v.as_str())
@@ -316,10 +347,7 @@ pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> 
             .and_then(|v| v.as_str())
             .map(String::from),
         duration: json.get("duration").and_then(|v| v.as_f64()),
-        thumbnail: json
-            .get("thumbnail")
-            .and_then(|v| v.as_str())
-            .map(String::from),
+        thumbnail: thumbnail_url(&json),
         webpage_url: json
             .get("webpage_url")
             .and_then(|v| v.as_str())
@@ -336,7 +364,79 @@ pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> 
             .map(|f| f.len())
             .unwrap_or(0),
         heights: available_heights(&json),
+        entries,
     })
+}
+
+/// Mejor miniatura disponible en un objeto de yt-dlp.
+fn thumbnail_url(json: &serde_json::Value) -> Option<String> {
+    if let Some(url) = json.get("thumbnail").and_then(|v| v.as_str()) {
+        return Some(url.to_string());
+    }
+    json.get("thumbnails")
+        .and_then(|v| v.as_array())
+        .and_then(|list| list.last())
+        .and_then(|thumb| thumb.get("url"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+}
+
+/// Elementos de una playlist, si el JSON describe una.
+fn playlist_entries(json: &serde_json::Value, parent_url: &str) -> Vec<PlaylistEntry> {
+    let is_playlist = json.get("_type").and_then(|v| v.as_str()) == Some("playlist")
+        || json.get("entries").is_some_and(|v| v.is_array());
+    if !is_playlist {
+        return Vec::new();
+    }
+
+    json.get("entries")
+        .and_then(|v| v.as_array())
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| playlist_entry(entry, parent_url))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn playlist_entry(entry: &serde_json::Value, parent_url: &str) -> Option<PlaylistEntry> {
+    if entry.is_null() {
+        return None;
+    }
+    let id = entry
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let url = entry_url(entry, parent_url, &id)?;
+    Some(PlaylistEntry {
+        id,
+        title: entry
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Sin título")
+            .to_string(),
+        url,
+        duration: entry.get("duration").and_then(|v| v.as_f64()),
+        thumbnail: thumbnail_url(entry),
+    })
+}
+
+/// Resuelve la URL de descarga de una entrada de playlist. Muchos extractores,
+/// con `--flat-playlist`, solo devuelven el id del video.
+fn entry_url(entry: &serde_json::Value, parent_url: &str, id: &str) -> Option<String> {
+    for key in ["webpage_url", "original_url", "url"] {
+        if let Some(value) = entry.get(key).and_then(|v| v.as_str())
+            && value.starts_with("http")
+        {
+            return Some(value.to_string());
+        }
+    }
+    if !id.is_empty() && is_youtube(parent_url) {
+        return Some(format!("https://www.youtube.com/watch?v={id}"));
+    }
+    None
 }
 
 /// Resoluciones de video presentes en la respuesta de yt-dlp.
@@ -399,13 +499,7 @@ pub fn parse_line(line: &str) -> Option<LineEvent> {
     if let Some(rest) = line.strip_prefix("__DL__") {
         let parts: Vec<&str> = rest.split('|').collect();
         if parts.len() == 5 {
-            return Some(LineEvent::Progress(ProgressTick {
-                downloaded_bytes: opt_f64(parts[0]).map(|v| v as u64),
-                total_bytes: opt_f64(parts[1]).map(|v| v as u64),
-                speed_bps: opt_f64(parts[2]),
-                eta_secs: opt_f64(parts[3]).map(|v| v as u64),
-                percent: opt_f64(parts[4]),
-            }));
+            return Some(LineEvent::Progress(progress_tick(&parts)));
         }
         return None;
     }
@@ -417,6 +511,40 @@ pub fn parse_line(line: &str) -> Option<LineEvent> {
         return Some(LineEvent::Phase(name.to_string()));
     }
     None
+}
+
+/// Construye un `ProgressTick` a partir de los campos del template.
+/// El porcentaje y el ETA se calculan aquí: `progress.percent` de yt-dlp
+/// devuelve `NA` en muchas versiones.
+fn progress_tick(parts: &[&str]) -> ProgressTick {
+    let downloaded = opt_f64(parts[0]).map(|v| v as u64);
+    let total = opt_f64(parts[1])
+        .map(|v| v as u64)
+        .or_else(|| opt_f64(parts[2]).map(|v| v as u64));
+    let speed_bps = opt_f64(parts[3]);
+
+    let percent = match (downloaded, total) {
+        (Some(done), Some(all)) if all > 0 => Some((done as f64 / all as f64 * 100.0).min(100.0)),
+        _ => None,
+    };
+
+    let eta_secs =
+        opt_f64(parts[4])
+            .map(|v| v as u64)
+            .or_else(|| match (downloaded, total, speed_bps) {
+                (Some(done), Some(all), Some(speed)) if speed > 0.0 && all > done => {
+                    Some(((all - done) as f64 / speed) as u64)
+                }
+                _ => None,
+            });
+
+    ProgressTick {
+        downloaded_bytes: downloaded,
+        total_bytes: total,
+        speed_bps,
+        eta_secs,
+        percent,
+    }
 }
 
 /// Lanza el proceso de yt-dlp con las tuberías listas para leer.
@@ -716,8 +844,60 @@ mod tests {
     }
 
     #[test]
+    fn detecta_playlist_y_sus_entradas() {
+        let json = serde_json::json!({
+            "_type": "playlist",
+            "title": "Mi playlist",
+            "webpage_url": "https://www.youtube.com/playlist?list=PL1",
+            "entries": [
+                { "id": "aaa", "title": "Primera", "duration": 60.0 },
+                { "id": "bbb", "title": "Segunda", "duration": null },
+                null
+            ]
+        });
+        let entries = playlist_entries(&json, "https://www.youtube.com/playlist?list=PL1");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].title, "Primera");
+        assert_eq!(entries[0].url, "https://www.youtube.com/watch?v=aaa");
+        assert_eq!(entries[0].duration, Some(60.0));
+        assert!(entries[1].duration.is_none());
+    }
+
+    #[test]
+    fn video_suelto_no_tiene_entradas() {
+        let json = serde_json::json!({
+            "title": "Un video",
+            "webpage_url": "https://vimeo.com/123",
+            "formats": [{ "height": 720 }]
+        });
+        assert!(playlist_entries(&json, "https://vimeo.com/123").is_empty());
+    }
+
+    #[test]
+    fn usa_la_url_completa_de_la_entrada_si_existe() {
+        let json = serde_json::json!({
+            "_type": "playlist",
+            "entries": [{ "id": "x", "title": "Con URL", "url": "https://vimeo.com/999" }]
+        });
+        let entries = playlist_entries(&json, "https://vimeo.com/album/1");
+        assert_eq!(entries[0].url, "https://vimeo.com/999");
+    }
+
+    #[test]
+    fn toma_la_ultima_miniatura_disponible() {
+        let json = serde_json::json!({
+            "thumbnails": [
+                { "url": "https://x/small.jpg" },
+                { "url": "https://x/big.jpg" }
+            ]
+        });
+        assert_eq!(thumbnail_url(&json).as_deref(), Some("https://x/big.jpg"));
+    }
+
+    #[test]
     fn interpreta_lineas_de_progreso() {
-        let event = parse_line("__DL__1000|4000|524288.0|12|25.0");
+        // downloaded | total | total_estimate | speed | eta
+        let event = parse_line("__DL__1000|4000|NA|524288.0|12");
         assert_eq!(
             event,
             Some(LineEvent::Progress(ProgressTick {
@@ -725,6 +905,22 @@ mod tests {
                 total_bytes: Some(4000),
                 speed_bps: Some(524288.0),
                 eta_secs: Some(12),
+                percent: Some(25.0),
+            }))
+        );
+    }
+
+    #[test]
+    fn calcula_porcentaje_y_eta_si_faltan() {
+        // Sin total real pero con estimación, y sin eta (se calcula con la velocidad).
+        let event = parse_line("__DL__1000|NA|4000|1000.0|NA");
+        assert_eq!(
+            event,
+            Some(LineEvent::Progress(ProgressTick {
+                downloaded_bytes: Some(1000),
+                total_bytes: Some(4000),
+                speed_bps: Some(1000.0),
+                eta_secs: Some(3),
                 percent: Some(25.0),
             }))
         );

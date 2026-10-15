@@ -7,6 +7,17 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-15
+
+### Added
+- **Playlists y canales**: al pegar el enlace de una playlist se listan todos sus vídeos con título y duración, se pueden seleccionar (todos/ninguno/uno a uno) y van a la cola de golpe
+- **Arrastrar o pegar playlists enteras**: una playlist en el portapapeles (o arrastrada) encola todos sus vídeos
+- Resoluciones estándar de reserva cuando el enlace no las reporta (p. ej. dentro de playlists)
+
+### Fixed
+- **Barra de progreso sin porcentaje**: `progress.percent` de yt-dlp devuelve `NA` en muchas versiones, así que el porcentaje y el ETA se calculan ahora en Rust a partir de los bytes y la velocidad
+- El cálculo usa `total_bytes_estimate` cuando el total real aún no se conoce
+
 ## [0.3.0] - 2026-10-15
 
 ### Added

@@ -1,5 +1,13 @@
 import type { DownloadOptions, MediaMode } from "./types";
 
+/** Resoluciones de reserva cuando el enlace no las reporta (p. ej. playlists). */
+export const DEFAULT_HEIGHTS = [2160, 1440, 1080, 720, 480, 360];
+
+/** Resoluciones a ofrecer: las reales del enlace o un set estándar si no hay. */
+export function availableHeightsFor(heights: number[]): number[] {
+  return heights.length > 0 ? heights : DEFAULT_HEIGHTS;
+}
+
 export function defaultOptions(): DownloadOptions {
   return {
     mode: "video",
