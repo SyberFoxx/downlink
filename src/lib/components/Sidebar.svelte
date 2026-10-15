@@ -1,10 +1,15 @@
 <script lang="ts">
-  let active = $state("descargas");
+  interface Props {
+    view: string;
+    onNavigate: (view: string) => void;
+  }
+
+  let { view, onNavigate }: Props = $props();
 
   const items = [
     { id: "descargas", label: "Descargas" },
     { id: "historial", label: "Historial", soon: true },
-    { id: "ajustes", label: "Ajustes", soon: true },
+    { id: "ajustes", label: "Ajustes" },
   ];
 </script>
 
@@ -21,14 +26,14 @@
   <nav class="mt-3 space-y-0.5 px-2">
     {#each items as item (item.id)}
       <button
-        class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors {active ===
+        class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors {view ===
         item.id
           ? 'bg-gray-900 text-gray-100'
           : 'text-gray-400 hover:bg-gray-900/50 hover:text-gray-200'} {item.soon
           ? 'cursor-not-allowed'
           : ''}"
         disabled={item.soon}
-        onclick={() => (active = item.id)}
+        onclick={() => onNavigate(item.id)}
       >
         {item.label}
         {#if item.soon}
@@ -41,6 +46,6 @@
   </nav>
 
   <div class="mt-auto px-4 py-3 text-[11px] text-gray-600">
-    v0.1.0-dev · potenciado por yt-dlp
+    v0.1.1-dev · potenciado por yt-dlp
   </div>
 </aside>

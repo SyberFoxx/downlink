@@ -35,6 +35,8 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 ## Características
 
 - 🎯 **Pega el link y listo** — detecta la plataforma, muestra preview (thumbnail, título, duración, canal)
+- 🍪 **Cookies del navegador** — usa tu sesión de Brave/Firefox/Chrome para YouTube y contenido restringido
+- 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
 - 🎞️ **Selector de formatos visual** — tabs Video / Audio / Personalizado, sin IDs crípticos
 - ⚡ **Presets** — "MP3 320k", "1080p MP4", "máxima calidad" en un click
 - 📋 **Cola inteligente** — drag & drop, pausar item individual, descargas concurrentes configurables
@@ -75,6 +77,17 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
 ```
 
 Los binarios de `yt-dlp` y `ffmpeg` se empaquetan junto a la app (aún no — ver [roadmap](#roadmap)).
+
+## Solución de problemas
+
+**«YouTube pidió verificación anti-bot» / «Sign in to confirm you're not a bot»**
+YouTube bloquea por IP cuando hay muchas peticiones o sesión no válida. Solución:
+1. Abre **Ajustes** en Downlink → Cookies → **Desde el navegador** → elige tu navegador (con sesión iniciada en YouTube) → Guardar.
+2. Pulsa **Probar conexión** para verificar.
+3. Si sigue fallando, cierra el navegador (para que la base de cookies no esté bloqueada) e intenta de nuevo.
+
+**«n challenge solving failed»**
+Falta un runtime JS: instala `node` (`sudo dnf install nodejs`) o `deno`. Downlink lo detecta automáticamente.
 
 ## Desarrollo
 
@@ -127,7 +140,7 @@ downlink/
 
 ### v0.4 — Madurez
 - [ ] Empaquetado de yt-dlp/ffmpeg como sidecars + auto-update
-- [ ] Importación de cookies para contenido privado
+- [x] ~~Importación de cookies para contenido privado~~ (hecho en v0.1.1)
 - [ ] System tray con progreso + notificaciones
 - [ ] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS)
 

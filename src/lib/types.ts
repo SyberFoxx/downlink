@@ -5,6 +5,7 @@ export interface ProbeInfo {
   thumbnail: string | null;
   webpageUrl: string;
   extractor: string | null;
+  formatsCount: number;
 }
 
 export type DownloadStatus = "downloading" | "done" | "error" | "cancelled";
@@ -19,4 +20,22 @@ export interface DownloadProgress {
   status: DownloadStatus;
   filePath: string | null;
   message: string | null;
+}
+
+export type CookiesMode = "none" | "browser" | "file";
+
+export interface Settings {
+  cookiesMode: CookiesMode;
+  cookiesBrowser: string | null;
+  cookiesFile: string | null;
+}
+
+export interface BrowserInfo {
+  id: string;
+  label: string;
+}
+
+export interface EngineInfo {
+  ytdlpVersion: string | null;
+  jsRuntime: string | null;
 }

@@ -40,6 +40,10 @@
         <span class="text-gray-700">·</span>
       {/if}
       <span>{formatDuration(info.duration)}</span>
+      {#if info.formatsCount > 0}
+        <span class="text-gray-700">·</span>
+        <span>{info.formatsCount} formatos</span>
+      {/if}
       {#if info.extractor}
         <span class="text-gray-700">·</span>
         <span>{info.extractor}</span>

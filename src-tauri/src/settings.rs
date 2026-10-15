@@ -1,0 +1,95 @@
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager};
+use tokio::sync::Mutex;
+
+/// Origen de las cookies para contenido restringido (YouTube anti-bot, privados…).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CookiesMode {
+    #[default]
+    None,
+    Browser,
+    File,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    pub cookies_mode: CookiesMode,
+    pub cookies_browser: Option<String>,
+    pub cookies_file: Option<String>,
+}
+
+pub struct SettingsState(pub Mutex<Settings>);
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserInfo {
+    pub id: String,
+    pub label: String,
+}
+
+/// Navegadores con perfil detectado en este equipo (de donde se pueden extraer cookies).
+pub fn detect_browsers() -> Vec<BrowserInfo> {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let candidates: [(&str, &str, &str); 7] = [
+        ("firefox", "Firefox", ".mozilla/firefox"),
+        ("brave", "Brave", ".config/BraveSoftware/Brave-Browser"),
+        ("chrome", "Google Chrome", ".config/google-chrome"),
+        ("chromium", "Chromium", ".config/chromium"),
+        ("edge", "Microsoft Edge", ".config/microsoft-edge"),
+        ("vivaldi", "Vivaldi", ".config/vivaldi"),
+        ("opera", "Opera", ".config/opera"),
+    ];
+
+    let Some(home) = home else {
+        return Vec::new();
+    };
+
+    candidates
+        .iter()
+        .filter(|(_, _, relative)| home.join(relative).is_dir())
+        .map(|(id, label, _)| BrowserInfo {
+            id: (*id).to_string(),
+            label: (*label).to_string(),
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineInfo {
+    pub ytdlp_version: Option<String>,
+    pub js_runtime: Option<String>,
+}
+
+fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|_| "No se pudo resolver la carpeta de configuración.".to_string())?;
+    Ok(dir.join("settings.json"))
+}
+
+pub fn load(app: &AppHandle) -> Settings {
+    let Ok(path) = settings_path(app) else {
+        return Settings::default();
+    };
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return Settings::default();
+    };
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
+    let path = settings_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("No se pudo crear la carpeta de configuración: {e}"))?;
+    }
+    let json = serde_json::to_string_pretty(settings)
+        .map_err(|e| format!("No se pudo serializar la configuración: {e}"))?;
+    std::fs::write(&path, json).map_err(|e| format!("No se pudo guardar la configuración: {e}"))
+}
