@@ -55,8 +55,23 @@ async fn cancel_download(app: tauri::AppHandle, id: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// Workaround: WebKitGTK con drivers NVIDIA propietarios choca en Wayland con
+/// "Error 71 (Protocol error)" al usar el renderer dmabuf. Lo deshabilitamos al
+/// arrancar (antes de inicializar GTK), salvo que el usuario ya lo haya definido.
+#[cfg(target_os = "linux")]
+fn apply_webkit_workarounds() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        // SAFETY: corre al inicio del proceso, antes de init de GTK/WebKit y sin
+        // otros threads en ejecución.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    apply_webkit_workarounds();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(Jobs(Arc::new(Mutex::new(HashMap::new()))))
