@@ -4,7 +4,7 @@
 
 **Descargador de videos y audio multiplataforma con interfaz moderna**
 
-[![CI](https://github.com/ramsesdlf/downlink/actions/workflows/ci.yml/badge.svg)](https://github.com/ramsesdlf/downlink/actions/workflows/ci.yml)
+[![CI](https://github.com/SyberFoxx/downlink/actions/workflows/ci.yml/badge.svg)](https://github.com/SyberFoxx/downlink/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tauri](https://img.shields.io/badge/Tauri-2.x-blueviolet?logo=tauri&logoColor=white)](https://tauri.app)
 [![Svelte](https://img.shields.io/badge/Svelte-5-orange?logo=svelte&logoColor=white)](https://svelte.dev)
@@ -79,7 +79,7 @@ Los binarios de `yt-dlp` y `ffmpeg` se empaquetan junto a la app (aún no — ve
 ## Desarrollo
 
 ```bash
-git clone https://github.com/ramsesdlf/downlink.git
+git clone https://github.com/SyberFoxx/downlink.git
 cd downlink
 npm install
 

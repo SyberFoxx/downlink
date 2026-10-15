@@ -5,7 +5,7 @@ description = "Descargador de videos y audio multiplataforma con interfaz modern
 authors = ["Ramses Sotomayor"]
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/ramsesdlf/downlink"
+repository = "https://github.com/SyberFoxx/downlink"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
