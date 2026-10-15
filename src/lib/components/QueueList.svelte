@@ -1,0 +1,112 @@
+<script lang="ts">
+  import type { QueueJob } from "$lib/types";
+  import DownloadRow from "$lib/components/DownloadRow.svelte";
+
+  interface Props {
+    jobs: QueueJob[];
+    onPause: (id: number) => void;
+    onResume: (id: number) => void;
+    onCancel: (id: number) => void;
+    onReveal: (job: QueueJob) => void;
+    onReorder: (ids: number[]) => void;
+    onClearFinished: () => void;
+  }
+
+  let { jobs, onPause, onResume, onCancel, onReveal, onReorder, onClearFinished }: Props =
+    $props();
+
+  let dragId = $state<number | null>(null);
+
+  let active = $derived(
+    jobs.filter((j) => j.status !== "done" && j.status !== "error" && j.status !== "cancelled")
+      .length,
+  );
+  let finished = $derived(jobs.length - active);
+
+  function handleDragStart(id: number, e: DragEvent) {
+    dragId = id;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(id));
+    }
+  }
+
+  function handleDragOver(id: number, e: DragEvent) {
+    if (dragId === null || dragId === id) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  }
+
+  function handleDrop(targetId: number) {
+    const sourceId = dragId;
+    dragId = null;
+    if (sourceId === null || sourceId === targetId) return;
+
+    const order = jobs.filter((j) => j.status === "queued").map((j) => j.id);
+    const from = order.indexOf(sourceId);
+    const to = order.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+
+    order.splice(to, 0, ...order.splice(from, 1));
+    onReorder(order);
+  }
+
+  function handleDragEnd() {
+    dragId = null;
+  }
+</script>
+
+<section class="mt-10">
+  <div class="mb-3 flex items-baseline justify-between gap-3">
+    <div class="flex items-baseline gap-2">
+      <h2 class="text-sm font-medium text-gray-300">Cola de descargas</h2>
+      {#if jobs.length > 0}
+        <span class="text-xs text-gray-600">
+          {#if active > 0}
+            {active} activa{active === 1 ? "" : "s"}
+          {/if}
+          {#if active > 0 && finished > 0}·{/if}
+          {#if finished > 0}
+            {finished} terminada{finished === 1 ? "" : "s"}
+          {/if}
+        </span>
+      {/if}
+    </div>
+
+    {#if finished > 0}
+      <button
+        class="shrink-0 rounded-md border border-gray-800 px-2.5 py-1 text-[11px] text-gray-500 transition-colors hover:border-gray-700 hover:text-gray-300"
+        onclick={onClearFinished}
+      >
+        Limpiar completadas
+      </button>
+    {/if}
+  </div>
+
+  {#if jobs.length === 0}
+    <div class="rounded-xl border border-dashed border-gray-800 px-6 py-10 text-center">
+      <p class="text-sm text-gray-500">Todavía no hay nada en la cola</p>
+      <p class="mt-1 text-xs text-gray-600">
+        Pega enlaces con Ctrl+V o arrástralos a la ventana
+      </p>
+    </div>
+  {:else}
+    <div class="space-y-2" role="list">
+      {#each jobs as job (job.id)}
+        <DownloadRow
+          {job}
+          reorderable={job.status === "queued"}
+          dragging={dragId === job.id}
+          {onPause}
+          {onResume}
+          {onCancel}
+          {onReveal}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onDragEnd={handleDragEnd}
+        />
+      {/each}
+    </div>
+  {/if}
+</section>

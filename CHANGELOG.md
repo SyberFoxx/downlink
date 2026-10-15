@@ -7,6 +7,22 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-15
+
+### Added
+- **Cola de descargas real**: varios trabajos en marcha con estados (en cola, descargando, procesando, en pausado, completado, error, cancelado)
+- **Concurrencia configurable** (1–8 descargas simultáneas) desde Ajustes, aplicada al instante
+- **Pausar y reanudar** una descarga en curso sin empezar de cero (yt-dlp continúa el archivo parcial)
+- **Reordenar la cola arrastrando** los pendientes (el orden arrastrado es el orden de descarga)
+- **Pegar varios enlaces a la vez** (Ctrl+V con varias URLs) o arrastrarlos a la ventana
+- **Estado «Procesando»** al mezclar/convertir con ffmpeg, y botón **«Mostrar en la carpeta»** al terminar
+- 7 tests nuevos de la cola y del parser de progreso (27 en total)
+
+### Changed
+- El progreso se envía como **lista completa de la cola** en el evento `queue-updated` (antes un evento parcial por trabajo)
+- `start_download` recibe ahora el título junto al enlace y las opciones
+- Deshabilitado el drop nativo de Tauri (`dragDropEnabled`) para permitir arrastrar y soltar en HTML dentro del webview (necesario en Windows)
+
 ## [0.2.0] - 2026-10-15
 
 ### Added

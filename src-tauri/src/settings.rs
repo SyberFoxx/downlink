@@ -14,12 +14,33 @@ pub enum CookiesMode {
     File,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// Descargas simultáneas por defecto.
+const DEFAULT_CONCURRENCY: u32 = 2;
+
+fn default_concurrency() -> u32 {
+    DEFAULT_CONCURRENCY
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub cookies_mode: CookiesMode,
     pub cookies_browser: Option<String>,
     pub cookies_file: Option<String>,
+    /// Número de descargas simultáneas (1–8).
+    #[serde(default = "default_concurrency")]
+    pub concurrency: u32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            cookies_mode: CookiesMode::None,
+            cookies_browser: None,
+            cookies_file: None,
+            concurrency: DEFAULT_CONCURRENCY,
+        }
+    }
 }
 
 pub struct SettingsState(pub Mutex<Settings>);

@@ -1,17 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::Arc;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::{Child, Command};
-use tokio::sync::Mutex;
+use tokio::process::{Child, ChildStderr, ChildStdout, Command};
 
 use crate::settings::{CookiesMode, EngineInfo, Settings};
-
-pub const DOWNLOAD_EVENT: &str = "download-progress";
 
 const PROGRESS_TEMPLATE: &str = "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.speed)s|%(progress.eta)s|%(progress.percent)s";
 const FILE_TEMPLATE: &str = "after_move:__FILE__%(filepath)s";
@@ -259,7 +253,7 @@ pub struct ProbeInfo {
 }
 
 /// Traduce errores de yt-dlp a mensajes accionables para el usuario.
-fn friendly_error(stderr: &str) -> String {
+pub(crate) fn friendly_error(stderr: &str) -> String {
     let raw = last_error_line(stderr).unwrap_or_else(|| "La operación falló.".to_string());
     let lower = raw.to_lowercase();
 
@@ -366,40 +360,77 @@ fn available_heights(json: &serde_json::Value) -> Vec<u32> {
 }
 
 // ---------------------------------------------------------------------------
-// Descarga
+// Proceso de descarga
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct ProgressPayload {
-    pub job_id: u64,
-    pub percent: Option<f64>,
+/// Un tick de progreso del protocolo `__DL__`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProgressTick {
     pub downloaded_bytes: Option<u64>,
     pub total_bytes: Option<u64>,
     pub speed_bps: Option<f64>,
     pub eta_secs: Option<u64>,
-    pub status: &'static str,
-    pub file_path: Option<String>,
-    pub message: Option<String>,
+    pub percent: Option<f64>,
 }
 
-pub type Jobs = Arc<Mutex<std::collections::HashMap<u64, Child>>>;
+/// Evento interpretado de una línea de la salida de yt-dlp.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LineEvent {
+    Progress(ProgressTick),
+    File(String),
+    Phase(String),
+}
 
-/// Lanza la descarga en segundo plano y emite eventos `download-progress`.
-pub async fn spawn_download(
-    app: AppHandle,
-    job_id: u64,
-    url: String,
-    out_dir: PathBuf,
-    jobs: Jobs,
-    settings: Settings,
-    options: DownloadOptions,
-) -> Result<(), String> {
-    let args = build_download_args(&settings, &url, &options);
+/// Postprocesadores cuyo inicio se muestra como «Procesando» en la cola.
+const PHASE_MARKERS: [&str; 9] = [
+    "[ExtractAudio]",
+    "[Merger]",
+    "[VideoConvertor]",
+    "[VideoRemuxer]",
+    "[Metadata]",
+    "[EmbedThumbnail]",
+    "[FixupM3u8]",
+    "[FixupStretched]",
+    "[MoveFiles]",
+];
+
+/// Interpreta una línea de stdout de yt-dlp.
+pub fn parse_line(line: &str) -> Option<LineEvent> {
+    if let Some(rest) = line.strip_prefix("__DL__") {
+        let parts: Vec<&str> = rest.split('|').collect();
+        if parts.len() == 5 {
+            return Some(LineEvent::Progress(ProgressTick {
+                downloaded_bytes: opt_f64(parts[0]).map(|v| v as u64),
+                total_bytes: opt_f64(parts[1]).map(|v| v as u64),
+                speed_bps: opt_f64(parts[2]),
+                eta_secs: opt_f64(parts[3]).map(|v| v as u64),
+                percent: opt_f64(parts[4]),
+            }));
+        }
+        return None;
+    }
+    if let Some(path) = line.strip_prefix("__FILE__") {
+        return Some(LineEvent::File(path.trim().to_string()));
+    }
+    if let Some(marker) = PHASE_MARKERS.iter().find(|m| line.starts_with(**m)) {
+        let name = marker.trim_start_matches('[').trim_end_matches(']');
+        return Some(LineEvent::Phase(name.to_string()));
+    }
+    None
+}
+
+/// Lanza el proceso de yt-dlp con las tuberías listas para leer.
+pub fn spawn_process(
+    settings: &Settings,
+    url: &str,
+    options: &DownloadOptions,
+    out_dir: &Path,
+) -> Result<(Child, ChildStdout, ChildStderr), String> {
+    let args = build_download_args(settings, url, options);
 
     let mut child = Command::new(ytdlp_bin())
         .args(&args)
-        .current_dir(&out_dir)
+        .current_dir(out_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -416,94 +447,7 @@ pub async fn spawn_download(
         .take()
         .ok_or_else(|| "No se pudo leer el error de yt-dlp.".to_string())?;
 
-    jobs.lock().await.insert(job_id, child);
-
-    tauri::async_runtime::spawn(async move {
-        let stderr_buf: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
-        let stderr_buf_task = stderr_buf.clone();
-        tauri::async_runtime::spawn(async move {
-            let mut lines = BufReader::new(stderr).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                let mut buf = stderr_buf_task.lock().await;
-                buf.push_str(&line);
-                buf.push('\n');
-            }
-        });
-
-        let mut final_path: Option<String> = None;
-        let mut lines = BufReader::new(stdout).lines();
-
-        while let Ok(Some(line)) = lines.next_line().await {
-            if let Some(rest) = line.strip_prefix("__DL__") {
-                let parts: Vec<&str> = rest.split('|').collect();
-                if parts.len() == 5 {
-                    let payload = ProgressPayload {
-                        job_id,
-                        downloaded_bytes: opt_f64(parts[0]).map(|v| v as u64),
-                        total_bytes: opt_f64(parts[1]).map(|v| v as u64),
-                        speed_bps: opt_f64(parts[2]),
-                        eta_secs: opt_f64(parts[3]).map(|v| v as u64),
-                        percent: opt_f64(parts[4]),
-                        status: "downloading",
-                        file_path: None,
-                        message: None,
-                    };
-                    let _ = app.emit(DOWNLOAD_EVENT, payload);
-                }
-            } else if let Some(path) = line.strip_prefix("__FILE__") {
-                final_path = Some(path.trim().to_string());
-            }
-        }
-
-        // El proceso terminó (o lo mató cancel_download, que ya emitió su evento)
-        let mut map = jobs.lock().await;
-        let Some(mut child) = map.remove(&job_id) else {
-            return;
-        };
-
-        let succeeded = child.try_wait().ok().flatten().is_some_and(|s| s.success());
-        let stderr_text = stderr_buf.lock().await.clone();
-
-        let payload = if succeeded {
-            ProgressPayload {
-                job_id,
-                percent: Some(100.0),
-                downloaded_bytes: None,
-                total_bytes: None,
-                speed_bps: None,
-                eta_secs: None,
-                status: "done",
-                file_path: final_path,
-                message: None,
-            }
-        } else {
-            ProgressPayload {
-                job_id,
-                percent: None,
-                downloaded_bytes: None,
-                total_bytes: None,
-                speed_bps: None,
-                eta_secs: None,
-                status: "error",
-                file_path: None,
-                message: Some(friendly_error(&stderr_text)),
-            }
-        };
-        let _ = app.emit(DOWNLOAD_EVENT, payload);
-    });
-
-    Ok(())
-}
-
-/// Detiene una descarga en curso. Devuelve `true` si había algo que cancelar.
-pub async fn cancel(jobs: &Jobs, job_id: u64) -> bool {
-    let mut map = jobs.lock().await;
-    if let Some(mut child) = map.remove(&job_id) {
-        let _ = child.kill().await;
-        true
-    } else {
-        false
-    }
+    Ok((child, stdout, stderr))
 }
 
 /// Información del motor para mostrarla en Ajustes.
@@ -563,6 +507,7 @@ mod tests {
             cookies_mode: mode,
             cookies_browser: browser.map(String::from),
             cookies_file: file.map(String::from),
+            ..Settings::default()
         }
     }
 
@@ -768,5 +713,58 @@ mod tests {
             ]
         });
         assert_eq!(available_heights(&json), vec![1440, 1080, 720]);
+    }
+
+    #[test]
+    fn interpreta_lineas_de_progreso() {
+        let event = parse_line("__DL__1000|4000|524288.0|12|25.0");
+        assert_eq!(
+            event,
+            Some(LineEvent::Progress(ProgressTick {
+                downloaded_bytes: Some(1000),
+                total_bytes: Some(4000),
+                speed_bps: Some(524288.0),
+                eta_secs: Some(12),
+                percent: Some(25.0),
+            }))
+        );
+    }
+
+    #[test]
+    fn interpreta_lineas_con_valores_vacios() {
+        let event = parse_line("__DL__NA|NA|NA|NA|NA");
+        assert_eq!(
+            event,
+            Some(LineEvent::Progress(ProgressTick {
+                downloaded_bytes: None,
+                total_bytes: None,
+                speed_bps: None,
+                eta_secs: None,
+                percent: None,
+            }))
+        );
+    }
+
+    #[test]
+    fn interpreta_la_ruta_del_archivo() {
+        assert_eq!(
+            parse_line("__FILE__/home/user/video.mp4"),
+            Some(LineEvent::File("/home/user/video.mp4".to_string()))
+        );
+    }
+
+    #[test]
+    fn detecta_fases_de_postprocesado() {
+        assert_eq!(
+            parse_line("[ExtractAudio] Destination: cancion.mp3"),
+            Some(LineEvent::Phase("ExtractAudio".to_string()))
+        );
+        assert_eq!(
+            parse_line("[Merger] Merging formats into \"video.mp4\""),
+            Some(LineEvent::Phase("Merger".to_string()))
+        );
+        // Las líneas normales de descarga no son fases.
+        assert_eq!(parse_line("[download] Destination: video.webm"), None);
+        assert_eq!(parse_line("[youtube] Extracting URL"), None);
     }
 }

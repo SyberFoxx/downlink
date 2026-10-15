@@ -1,24 +1,23 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { revealItemInDir } from "@tauri-apps/plugin-opener";
   import {
     cancelDownload,
-    onDownloadProgress,
+    clearFinished,
+    getQueue,
+    onQueueUpdated,
+    pauseDownload,
     probeUrl,
+    reorderQueue,
+    resumeDownload,
     startDownload,
   } from "$lib/api";
-  import type { DownloadProgress, ProbeInfo } from "$lib/types";
+  import type { ProbeInfo, QueueJob } from "$lib/types";
   import PreviewCard from "$lib/components/PreviewCard.svelte";
   import OptionsPanel from "$lib/components/OptionsPanel.svelte";
-  import DownloadRow from "$lib/components/DownloadRow.svelte";
-  import { defaultOptions, summarizeOptions } from "$lib/options";
+  import QueueList from "$lib/components/QueueList.svelte";
+  import { defaultOptions } from "$lib/options";
   import type { DownloadOptions } from "$lib/types";
-
-  interface Job {
-    id: number;
-    title: string;
-    subtitle: string;
-    progress: DownloadProgress | null;
-  }
 
   interface Props {
     onGoToSettings: () => void;
@@ -30,19 +29,48 @@
   let probing = $state(false);
   let errorMessage = $state<string | null>(null);
   let probe = $state<ProbeInfo | null>(null);
-  let jobs = $state<Job[]>([]);
+  let jobs = $state<QueueJob[]>([]);
   let starting = $state(false);
   let options = $state<DownloadOptions>(defaultOptions());
+  let adding = $state(0);
+  let dropActive = $state(false);
+
+  const STATUS_ORDER: Record<QueueJob["status"], number> = {
+    downloading: 0,
+    processing: 1,
+    queued: 2,
+    paused: 3,
+    error: 4,
+    done: 5,
+    cancelled: 6,
+  };
+
+  let orderedJobs = $derived.by(() => {
+    const index = new Map(jobs.map((j, i) => [j.id, i] as const));
+    return [...jobs].sort((a, b) => {
+      const diff = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
+      if (diff !== 0) return diff;
+      // Los pendientes conservan el orden de despacho que mantiene el backend.
+      if (a.status === "queued") {
+        return (index.get(a.id) ?? 0) - (index.get(b.id) ?? 0);
+      }
+      return b.id - a.id;
+    });
+  });
 
   let needsCookies = $derived(
-    !!errorMessage &&
-      /cookies|anti-bot|verificaci|sign in/i.test(errorMessage),
+    !!errorMessage && /cookies|anti-bot|verificaci|sign in/i.test(errorMessage),
   );
 
   function extractError(e: unknown): string {
     if (typeof e === "string") return e;
     if (e instanceof Error) return e.message;
     return "Error inesperado";
+  }
+
+  function extractUrls(text: string): string[] {
+    const matches = text.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
+    return [...new Set(matches.map((m) => m.trim()))];
   }
 
   async function analyze(raw?: string) {
@@ -61,22 +89,40 @@
     }
   }
 
+  /** Un enlace → previsualiza; varios → van directos a la cola. */
+  async function handleIncoming(text: string) {
+    const urls = extractUrls(text);
+    if (urls.length === 0) return;
+    if (urls.length === 1) {
+      await analyze(urls[0]);
+      return;
+    }
+    await enqueueUrls(urls);
+  }
+
+  async function enqueueUrls(urls: string[]) {
+    const snapshot = $state.snapshot(options);
+    adding = urls.length;
+    for (const link of urls) {
+      try {
+        const info = await probeUrl(link);
+        await startDownload(info.webpageUrl, info.title, snapshot);
+      } catch (e) {
+        errorMessage = extractError(e);
+      } finally {
+        adding = Math.max(0, adding - 1);
+      }
+    }
+    adding = 0;
+  }
+
   async function download() {
     if (!probe || starting) return;
     starting = true;
     errorMessage = null;
     const snapshot = $state.snapshot(options);
     try {
-      const jobId = await startDownload(probe.webpageUrl, snapshot);
-      jobs = [
-        {
-          id: jobId,
-          title: probe.title,
-          subtitle: summarizeOptions(snapshot),
-          progress: null,
-        },
-        ...jobs,
-      ];
+      await startDownload(probe.webpageUrl, probe.title, snapshot);
       probe = null;
       url = "";
     } catch (e) {
@@ -86,39 +132,132 @@
     }
   }
 
-  async function cancel(jobId: number) {
+  async function pause(id: number) {
     try {
-      await cancelDownload(jobId);
+      await pauseDownload(id);
     } catch (e) {
       errorMessage = extractError(e);
     }
   }
 
+  async function resume(id: number) {
+    try {
+      await resumeDownload(id);
+    } catch (e) {
+      errorMessage = extractError(e);
+    }
+  }
+
+  async function cancel(id: number) {
+    try {
+      await cancelDownload(id);
+    } catch (e) {
+      errorMessage = extractError(e);
+    }
+  }
+
+  async function reorder(ids: number[]) {
+    try {
+      await reorderQueue(ids);
+    } catch (e) {
+      errorMessage = extractError(e);
+    }
+  }
+
+  async function reveal(job: QueueJob) {
+    if (!job.filePath) return;
+    try {
+      await revealItemInDir(job.filePath);
+    } catch (e) {
+      errorMessage = extractError(e);
+    }
+  }
+
+  async function clear() {
+    try {
+      await clearFinished();
+    } catch (e) {
+      errorMessage = extractError(e);
+    }
+  }
+
+  let dragDepth = 0;
+
+  function isExternalDrag(e: DragEvent): boolean {
+    const types = e.dataTransfer?.types;
+    return (
+      !!types &&
+      (types.includes("text/uri-list") ||
+        types.includes("text/plain") ||
+        types.includes("Files"))
+    );
+  }
+
+  function onDragEnter(e: DragEvent) {
+    if (!isExternalDrag(e)) return;
+    dragDepth += 1;
+    dropActive = true;
+  }
+
+  function onDragLeave() {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) dropActive = false;
+  }
+
+  function onDragOver(e: DragEvent) {
+    if (!isExternalDrag(e)) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  }
+
+  function onDrop(e: DragEvent) {
+    if (!isExternalDrag(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    dropActive = false;
+    const text =
+      e.dataTransfer?.getData("text/uri-list") ||
+      e.dataTransfer?.getData("text/plain") ||
+      "";
+    handleIncoming(text);
+  }
+
   onMount(() => {
-    const unlisten = onDownloadProgress((progress) => {
-      jobs = jobs.map((j) => (j.id === progress.jobId ? { ...j, progress } : j));
+    const unlistenQueue = onQueueUpdated((list) => {
+      jobs = list;
+    });
+    getQueue().then((list) => {
+      jobs = list;
     });
 
     const onPaste = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData("text")?.trim();
-      if (text && /^https?:\/\//i.test(text)) {
-        analyze(text);
-      }
+      if (text && /^https?:\/\//i.test(text)) handleIncoming(text);
     };
+
     window.addEventListener("paste", onPaste);
+    window.addEventListener("dragenter", onDragEnter);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
 
     return () => {
-      unlisten.then((un) => un());
+      unlistenQueue.then((un) => un());
       window.removeEventListener("paste", onPaste);
+      window.removeEventListener("dragenter", onDragEnter);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
     };
   });
 </script>
 
-<div class="mx-auto max-w-3xl px-10 py-12">
+<div class="relative mx-auto max-w-3xl px-10 py-12">
   <header class="mb-8">
     <h1 class="text-lg font-semibold tracking-tight text-gray-100">Descargar</h1>
     <p class="mt-1 text-sm text-gray-500">
-      Pega un enlace de YouTube, TikTok, Instagram y +1800 sitios soportados
+      Pega o arrastra enlaces de YouTube, TikTok, Instagram y +1800 sitios
+      soportados
     </p>
   </header>
 
@@ -162,9 +301,22 @@
   </div>
 
   <p class="mt-2 text-xs text-gray-600">
-    Tip: pega el enlace directamente con <span class="font-mono text-gray-500">Ctrl+V</span> en
-    cualquier parte de la ventana
+    Tip: pega uno o varios enlaces con <span class="font-mono text-gray-500">Ctrl+V</span>,
+    o arrástralos directamente a la ventana
   </p>
+
+  <!-- Enlaces añadiéndose a la cola -->
+  {#if adding > 0}
+    <div
+      class="mt-4 flex items-center gap-2.5 rounded-lg border border-gray-800 bg-gray-900/30 px-4 py-3 text-sm text-gray-400"
+    >
+      <svg class="size-4 animate-spin text-violet-400" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" />
+        <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v3a5 5 0 0 0-5 5H4z" />
+      </svg>
+      Añadiendo {adding} enlace{adding === 1 ? "" : "s"} a la cola…
+    </div>
+  {/if}
 
   <!-- Error -->
   {#if errorMessage}
@@ -191,18 +343,25 @@
     </div>
   {/if}
 
-  <!-- Descargas -->
-  {#if jobs.length > 0}
-    <section class="mt-10">
-      <div class="mb-3 flex items-baseline justify-between">
-        <h2 class="text-sm font-medium text-gray-300">Descargas</h2>
-        <span class="text-xs text-gray-600">{jobs.length} en cola</span>
+  <!-- Cola -->
+  <QueueList
+    jobs={orderedJobs}
+    onPause={pause}
+    onResume={resume}
+    onCancel={cancel}
+    onReveal={reveal}
+    onReorder={reorder}
+    onClearFinished={clear}
+  />
+
+  <!-- Resaltado al arrastrar enlaces -->
+  {#if dropActive}
+    <div
+      class="pointer-events-none fixed inset-4 z-50 rounded-2xl border-2 border-dashed border-violet-500/70 bg-violet-500/5"
+    >
+      <div class="absolute inset-x-0 top-6 text-center text-sm font-medium text-violet-300">
+        Suelta para añadir a la cola
       </div>
-      <div class="space-y-2">
-        {#each jobs as job (job.id)}
-          <DownloadRow {job} onCancel={cancel} />
-        {/each}
-      </div>
-    </section>
+    </div>
   {/if}
 </div>

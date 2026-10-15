@@ -34,19 +34,27 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 
 ## Características
 
+### Descarga y cola
 - 🎯 **Pega el link y listo** — detecta la plataforma, muestra preview (thumbnail, título, duración, canal)
-- 🍪 **Cookies del navegador** — usa tu sesión de Brave/Firefox/Chrome para YouTube y contenido restringido
-- 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
+- 📋 **Cola inteligente** — varias descargas a la vez, con pausa y reanudación individual
+- 🧲 **Reordena arrastrando** — el orden en que arrastras los pendientes es el orden en que se descargan
+- 🖱️ **Arrastra enlaces a la ventana** — o pega varios enlaces de golpe con `Ctrl+V`
+- 🔢 **Concurrencia configurable** — de 1 a 8 descargas simultáneas según tu conexión
+- 📂 **Mostrar en la carpeta** — un click para abrir el archivo terminado
+
+### Formatos y audio
 - 🎞️ **Selector de formatos visual** — resoluciones reales del enlace, contenedores MP4/MKV/WEBM
 - 🎵 **Todos los formatos de audio** — MP3, M4A, OGG, OPUS, FLAC, WAV u original sin recomprimir
 - 🔊 **Control de volumen** — sube o baja ±20 dB y normaliza el audio con ffmpeg
 - ⚡ **Presets de un click** — Máxima calidad, Video 1080p, MP3 320k, FLAC, Audio original
-- 📋 **Cola inteligente** — drag & drop, pausar item individual, descargas concurrentes configurables
-- ✂️ **Recortar clips** — define inicio/fin antes de descargar, sin transcodificar de más
 - 🏷️ **Metadatos automáticos** — título, artista e imagen incrustados en archivos de audio
-- 📜 **Historial con galería** — búsqueda, miniaturas, re-descarga con un click
-- 🔄 **Auto-update de yt-dlp** — YouTube cambia cada dos semanas; Downlink se mantiene al día
-- 🌙 **Tema oscuro/claro**
+
+### Motor y compatibilidad
+- 🍪 **Cookies del navegador** — usa tu sesión de Brave/Firefox/Chrome para YouTube y contenido restringido
+- 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
+- 🔧 **Estado del motor** — yt-dlp, runtime JS y ffmpeg detectados y probados desde Ajustes
+
+En el [roadmap](#roadmap): playlists, recorte de clips, subtítulos, historial, tema claro y auto-update de yt-dlp.
 
 ## Tech Stack
 
@@ -122,36 +130,43 @@ downlink/
 
 ## Roadmap
 
-### v0.1 — Cimientos 🚧
+### v0.1 — Cimientos ✅
 - [x] Scaffold Tauri 2 + Svelte 5
-- [ ] UI base: layout con sidebar, tema oscuro/claro
-- [ ] Pegar link → probe de metadatos → preview card
-- [ ] Descarga simple con barra de progreso en tiempo real
+- [x] UI base: layout con sidebar y tema oscuro
+- [x] Pegar link → probe de metadatos → preview card
+- [x] Descarga simple con barra de progreso en tiempo real
+- [x] Cookies del navegador + solver EJS + vista Ajustes (v0.1.1)
 
-### v0.2 — Cola y formatos
+### v0.2 — Formatos y audio ✅
 - [x] Selector de formatos visual (video/audio, resoluciones reales)
 - [x] Contenedores MP4/MKV/WEBM + códecs compatibles en MP4
 - [x] Formatos de audio (MP3/M4A/OGG/OPUS/FLAC/WAV/original)
 - [x] Control de volumen y normalización (ffmpeg)
 - [x] Presets configurables
-- [ ] Cola con drag & drop, pausa/cancelar, concurrencia
 
-### v0.3 — Extras
+### v0.3 — Cola inteligente ✅
+- [x] Cola con varios trabajos y estados (en cola, descargando, procesando, pausado…)
+- [x] Pausar y reanudar sin empezar de cero
+- [x] Reordenar los pendientes arrastrando
+- [x] Concurrencia configurable (1–8 descargas simultáneas)
+- [x] Pegar varios enlaces a la vez / arrastrarlos a la ventana
+
+### v0.4 — Extras
 - [ ] Playlists y canales (expansión y selección de items)
 - [ ] Recorte de clips (`--download-sections`)
 - [ ] Subtítulos (descarga e incrustado)
 - [ ] Historial con galería y búsqueda
-- [ ] Metadatos incrustados en audio
+- [ ] Tema claro
 
-### v0.4 — Madurez
+### v0.5 — Madurez
 - [ ] Empaquetado de yt-dlp/ffmpeg como sidecars + auto-update
-- [x] ~~Importación de cookies para contenido privado~~ (hecho en v0.1.1)
 - [ ] System tray con progreso + notificaciones
 - [ ] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS)
 
 ### v1.0 — Android 📱
 - [ ] Port a Tauri 2 mobile (arm64)
 - [ ] UI adaptada a móvil (gestos, bottom nav)
+- [ ] yt-dlp/ffmpeg empaquetados por arquitectura (arm64)
 
 ## Contribuir
 

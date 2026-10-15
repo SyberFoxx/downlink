@@ -16,6 +16,7 @@
     cookiesMode: "none",
     cookiesBrowser: null,
     cookiesFile: null,
+    concurrency: 2,
   });
   let browsers = $state<BrowserInfo[]>([]);
   let engine = $state<EngineInfo | null>(null);
@@ -228,6 +229,29 @@
         {/if}
       </div>
     </div>
+  </section>
+
+  <!-- Cola -->
+  <section class="mb-8">
+    <h2 class="mb-1 text-sm font-medium text-gray-300">Cola de descargas</h2>
+    <p class="mb-4 text-xs text-gray-500">
+      Más descargas simultáneas aprovechan mejor la conexión, pero compiten entre sí
+      y con el resto de tus aplicaciones.
+    </p>
+    <div class="flex items-center gap-3">
+      <select
+        bind:value={settings.concurrency}
+        aria-label="Descargas simultáneas"
+        class="w-40 rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-600"
+      >
+        {#each [1, 2, 3, 4, 6, 8] as n (n)}
+          <option value={n}>{n} simultánea{n === 1 ? "" : "s"}</option>
+        {/each}
+      </select>
+    </div>
+    <p class="mt-1.5 text-[11px] text-gray-600">
+      Aplica de inmediato: si subes el número, arrancan los pendientes de la cola.
+    </p>
   </section>
 
   <!-- Prueba -->

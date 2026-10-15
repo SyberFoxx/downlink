@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.2.0**
+- Versión actual: **0.3.0**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -40,17 +40,19 @@ downlink/
 │   │   │   ├── Sidebar.svelte       # Navegación + versión en el pie
 │   │   │   ├── PreviewCard.svelte   # Metadatos del probe
 │   │   │   ├── OptionsPanel.svelte  # Pestañas Video/Audio, presets, volumen
-│   │   │   └── DownloadRow.svelte   # Fila de progreso por trabajo
+│   │   │   ├── QueueList.svelte     # Sección de cola + drag & drop entre pendientes
+│   │   │   └── DownloadRow.svelte   # Fila de un trabajo (estados y acciones)
 │   │   └── views/
-│   │       ├── DownloadsView.svelte # URL, probe, opciones, lista de trabajos
-│   │       └── SettingsView.svelte  # Cookies, estado del motor, probar conexión
+│   │       ├── DownloadsView.svelte # URL, probe, opciones, cola, pegado/arrastre
+│   │       └── SettingsView.svelte  # Cookies, concurrencia, motor, probar conexión
 │   └── app.css                  # Tailwind + base oscura
 ├── src-tauri/
 │   ├── src/
 │   │   ├── main.rs              # Entry point
-│   │   ├── lib.rs               # Builder, comandos Tauri, estado (jobs), workaround Wayland
+│   │   ├── lib.rs               # Builder, comandos Tauri, estado, workaround Wayland
+│   │   ├── queue.rs             # Cola de trabajos (estados, concurrencia, pausa, orden)
 │   │   ├── settings.rs          # Settings persistidos, detección de navegadores, EngineInfo
-│   │   └── ytdlp.rs             # Args de yt-dlp, probe, descarga, errores, tests
+│   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 └── .github/workflows/ci.yml     # CI: frontend + Rust (ubuntu + windows)
@@ -93,28 +95,45 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
 | Comando | Entrada | Salida |
 |---|---|---|
 | `probe_url` | `url` | `ProbeInfo` (metadatos + `heights`) |
-| `start_download` | `url`, `options` | `job_id: u64` |
-| `cancel_download` | `id` | — (emite evento `cancelled`) |
+| `start_download` | `url`, `title`, `options` | `job_id: u64` (añade a la cola) |
+| `pause_download` / `resume_download` / `cancel_download` | `id` | — |
+| `reorder_queue` | `ids: Vec<u64>` | — (reordena los pendientes) |
+| `clear_finished` | — | — (quita los terminados) |
+| `get_queue` | — | `Vec<JobView>` |
 | `get_settings` / `save_settings` | `settings` | `Settings` |
 | `detect_browsers` | — | `BrowserInfo[]` |
 | `engine_info` | — | `EngineInfo` (yt-dlp, runtime JS, ffmpeg) |
 
-### Evento de progreso
+### La cola (`queue.rs`)
 
-Canal único `download-progress` (`DOWNLOAD_EVENT`), payload `ProgressPayload`:
+`Queue` es el estado gestionado por Tauri. Cada trabajo recorre
+`queued → downloading → processing → done | error`, más `paused` y `cancelled`.
+
+- **Concurrencia** (`Settings.concurrency`, 1–8, por defecto 2): `pump()` arranca
+  pendientes hasta llenar los huecos y vuelve a llamar al terminar cada trabajo.
+- **Pausa**: mata el proceso; `yt-dlp` reanuda el archivo `.part` al reanudar, así
+  que **no** se empieza de cero (no pasar `--continue` a mano).
+- **Orden**: el orden del vector `jobs` es el orden de despacho de los pendientes.
+  `reorder_queue` lo cambia; la UI solo reordena los que están `queued`.
+
+### Evento de cola
+
+Canal único `queue-updated` (`QUEUE_EVENT`) con **la lista completa** de trabajos
+(`Vec<JobView>`): el frontend la sustituye entera, sin fusionar.
 
 ```jsonc
-{
-  "jobId": 1, "percent": 42.5, "downloadedBytes": 123, "totalBytes": 456,
-  "speedBps": 789, "etaSecs": 10,
-  "status": "downloading | done | error | cancelled",
-  "filePath": "/home/…/video.mp4", "message": null
-}
+{ "id": 1, "url": "…", "title": "…", "options": { … },
+  "status": "queued | downloading | processing | paused | done | error | cancelled",
+  "percent": 42.5, "downloadedBytes": 123, "totalBytes": 456, "speedBps": 789,
+  "etaSecs": 10, "filePath": "/home/…/video.mp4", "message": null }
 ```
 
-Protocolo de línea sobre stdout de yt-dlp (en `ytdlp.rs`):
+Se emite como máximo cada 200 ms entre ticks de progreso.
+
+Protocolo de línea sobre stdout de yt-dlp (en `ytdlp.rs` → `parse_line`):
 - `__DL__<descargado>|<total>|<velocidad>|<eta>|<porcentaje>` → progreso
 - `__FILE__<ruta>` → ruta final del archivo
+- líneas `[ExtractAudio]`, `[Merger]`, `[Metadata]`… → estado «procesando»
 
 ### Esquema de argumentos
 
@@ -141,6 +160,9 @@ Protocolo de línea sobre stdout de yt-dlp (en `ytdlp.rs`):
 - Variables de entorno útiles (override, sobre todo en tests): `DOWNLINK_YTDLP` (ruta del binario), `DOWNLINK_JS_RUNTIME` (runtime forzado), `WEBKIT_DISABLE_DMABUF_RENDERER`.
 - **Config y ajustes persistidos**: `settings.json` dentro de `app_config_dir()` (en Linux, `~/.config/<bundle-id>/`).
 - Los archivos se descargan en `download_dir()` con patrón `%(title)s [%(id)s].%(ext)s`.
+- **`dragDropEnabled: false`** en `tauri.conf.json`: con el drop nativo de Tauri activo el
+  webview no dispara el drag & drop HTML5 interno (rompe el reordenamiento de la cola, sobre
+  todo en Windows). El arrastre de enlaces se resuelve en HTML5 en `DownloadsView`.
 
 ### Trampas técnicas ya resueltas (no las reintroduzcas)
 
@@ -166,9 +188,10 @@ Ver `README.md` → sección Roadmap (fuente de verdad del plan) y `CHANGELOG.md
 
 Resumen:
 - **v0.1 / v0.1.1** ✅ — cimientos, cookies del navegador, EJS, vista Ajustes.
-- **v0.2** 🚧 — selector de formatos, contenedores, formatos de audio, volumen/normalización, presets. **Pendiente**: cola con drag & drop y concurrencia.
-- **v0.3** — playlists, recorte de clips (`--download-sections`), subtítulos, historial.
-- **v0.4** — sidecars (empaquetar yt-dlp/ffmpeg) + auto-update, system tray, instaladores.
+- **v0.2** ✅ — selector de formatos, contenedores, formatos de audio, volumen/normalización, presets.
+- **v0.3** ✅ — cola inteligente: concurrencia, pausa/reanudar, reordenar arrastrando, pegado múltiple.
+- **v0.4** — playlists, recorte de clips (`--download-sections`), subtítulos, historial, tema claro.
+- **v0.5** — sidecars (empaquetar yt-dlp/ffmpeg) + auto-update, system tray, instaladores.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
 ## Al terminar un cambio

@@ -1,20 +1,17 @@
+mod queue;
 mod settings;
 mod ytdlp;
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
-use tauri::{Emitter, Manager};
-use tokio::sync::Mutex;
+use tauri::{Manager, State};
 
+use queue::{JobView, Queue};
 use settings::{Settings, SettingsState};
+use ytdlp::DownloadOptions;
 
-/// Trabajos activos: job_id → proceso yt-dlp en marcha.
-struct Jobs(ytdlp::Jobs);
-
-/// Generador de ids incremental para los trabajos.
-struct JobCounter(AtomicU64);
+/// Estado global de la cola de descargas.
+struct QueueState(Arc<Queue>);
 
 /// Workaround: WebKitGTK con drivers NVIDIA propietarios choca en Wayland con
 /// "Error 71 (Protocol error)" al usar el renderer dmabuf. Lo deshabilitamos al
@@ -35,44 +32,64 @@ async fn probe_url(app: tauri::AppHandle, url: String) -> Result<ytdlp::ProbeInf
     ytdlp::probe(&settings, &url).await
 }
 
-/// Inicia una descarga en la carpeta de Descargas del usuario.
-/// Devuelve el id del trabajo; el progreso llega por el evento `download-progress`.
+/// Añade una descarga a la cola. Devuelve el id del trabajo; el estado llega por
+/// el evento `queue-updated`.
 #[tauri::command]
 async fn start_download(
     app: tauri::AppHandle,
     url: String,
-    options: ytdlp::DownloadOptions,
+    title: Option<String>,
+    options: DownloadOptions,
 ) -> Result<u64, String> {
     let settings = app.state::<SettingsState>().0.lock().await.clone();
-    let job_id = app.state::<JobCounter>().0.fetch_add(1, Ordering::SeqCst) + 1;
-    let out_dir = app
-        .path()
-        .download_dir()
-        .map_err(|_| "No se encontró la carpeta de Descargas.".to_string())?;
-    let jobs = app.state::<Jobs>().0.clone();
-    ytdlp::spawn_download(app, job_id, url, out_dir, jobs, settings, options).await?;
-    Ok(job_id)
+    let queue = app.state::<QueueState>().0.clone();
+    let title = title
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| url.clone());
+    Ok(queue.enqueue(&settings, url, title, options).await)
 }
 
-/// Cancela una descarga en curso.
+/// Pausa un trabajo en curso.
+#[tauri::command]
+async fn pause_download(app: tauri::AppHandle, id: u64) -> Result<(), String> {
+    app.state::<QueueState>().0.pause(id).await;
+    Ok(())
+}
+
+/// Reanuda un trabajo pausado.
+#[tauri::command]
+async fn resume_download(app: tauri::AppHandle, id: u64) -> Result<(), String> {
+    let settings = app.state::<SettingsState>().0.lock().await.clone();
+    app.state::<QueueState>().0.resume(&settings, id).await;
+    Ok(())
+}
+
+/// Cancela un trabajo.
 #[tauri::command]
 async fn cancel_download(app: tauri::AppHandle, id: u64) -> Result<(), String> {
-    let jobs = app.state::<Jobs>().0.clone();
-    if ytdlp::cancel(&jobs, id).await {
-        let payload = ytdlp::ProgressPayload {
-            job_id: id,
-            percent: None,
-            downloaded_bytes: None,
-            total_bytes: None,
-            speed_bps: None,
-            eta_secs: None,
-            status: "cancelled",
-            file_path: None,
-            message: None,
-        };
-        let _ = app.emit(ytdlp::DOWNLOAD_EVENT, payload);
-    }
+    app.state::<QueueState>().0.cancel(id).await;
     Ok(())
+}
+
+/// Reordena los trabajos pendientes de la cola.
+#[tauri::command]
+async fn reorder_queue(app: tauri::AppHandle, ids: Vec<u64>) -> Result<(), String> {
+    app.state::<QueueState>().0.reorder(&ids).await;
+    Ok(())
+}
+
+/// Quita de la cola los trabajos terminados.
+#[tauri::command]
+async fn clear_finished(app: tauri::AppHandle) -> Result<(), String> {
+    app.state::<QueueState>().0.clear_finished().await;
+    Ok(())
+}
+
+/// Estado actual de la cola (para sincronizar al montar la vista).
+#[tauri::command]
+async fn get_queue(state: State<'_, QueueState>) -> Result<Vec<JobView>, String> {
+    Ok(state.0.snapshot().await)
 }
 
 /// Configuración actual.
@@ -85,7 +102,13 @@ async fn get_settings(app: tauri::AppHandle) -> Result<Settings, String> {
 #[tauri::command]
 async fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
     settings::save(&app, &settings)?;
-    *app.state::<SettingsState>().0.lock().await = settings;
+    *app.state::<SettingsState>().0.lock().await = settings.clone();
+
+    let queue = app.state::<QueueState>().0.clone();
+    queue.set_concurrency(settings.concurrency as usize).await;
+    // Si el usuario subió la concurrencia, arranca los pendientes que quepan.
+    queue.pump(settings).await;
+
     Ok(())
 }
 
@@ -95,7 +118,7 @@ fn detect_browsers() -> Vec<settings::BrowserInfo> {
     settings::detect_browsers()
 }
 
-/// Versión de yt-dlp y runtime JS detectado.
+/// Versión de yt-dlp, runtime JS y ffmpeg detectados.
 #[tauri::command]
 async fn engine_info() -> settings::EngineInfo {
     ytdlp::engine_info().await
@@ -109,17 +132,25 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Jobs(Arc::new(Mutex::new(HashMap::new()))))
-        .manage(JobCounter(AtomicU64::new(0)))
         .setup(|app| {
             let settings = settings::load(app.handle());
-            app.manage(SettingsState(Mutex::new(settings)));
+            let concurrency = settings.concurrency as usize;
+            app.manage(SettingsState(tokio::sync::Mutex::new(settings)));
+            app.manage(QueueState(Arc::new(Queue::new(
+                app.handle().clone(),
+                concurrency,
+            ))));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             probe_url,
             start_download,
+            pause_download,
+            resume_download,
             cancel_download,
+            reorder_queue,
+            clear_finished,
+            get_queue,
             get_settings,
             save_settings,
             detect_browsers,

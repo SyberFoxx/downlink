@@ -4,9 +4,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type {
   BrowserInfo,
   DownloadOptions,
-  DownloadProgress,
   EngineInfo,
   ProbeInfo,
+  QueueJob,
   Settings,
 } from "./types";
 
@@ -16,21 +16,40 @@ export function probeUrl(url: string): Promise<ProbeInfo> {
 
 export function startDownload(
   url: string,
+  title: string | null,
   options: DownloadOptions,
 ): Promise<number> {
-  return invoke<number>("start_download", { url, options });
+  return invoke<number>("start_download", { url, title, options });
+}
+
+export function pauseDownload(jobId: number): Promise<void> {
+  return invoke<void>("pause_download", { id: jobId });
+}
+
+export function resumeDownload(jobId: number): Promise<void> {
+  return invoke<void>("resume_download", { id: jobId });
 }
 
 export function cancelDownload(jobId: number): Promise<void> {
   return invoke<void>("cancel_download", { id: jobId });
 }
 
-export function onDownloadProgress(
-  callback: (progress: DownloadProgress) => void,
+export function reorderQueue(ids: number[]): Promise<void> {
+  return invoke<void>("reorder_queue", { ids });
+}
+
+export function clearFinished(): Promise<void> {
+  return invoke<void>("clear_finished");
+}
+
+export function getQueue(): Promise<QueueJob[]> {
+  return invoke<QueueJob[]>("get_queue");
+}
+
+export function onQueueUpdated(
+  callback: (jobs: QueueJob[]) => void,
 ): Promise<() => void> {
-  return listen<DownloadProgress>("download-progress", (event) =>
-    callback(event.payload),
-  );
+  return listen<QueueJob[]>("queue-updated", (event) => callback(event.payload));
 }
 
 export function getSettings(): Promise<Settings> {

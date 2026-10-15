@@ -9,39 +9,14 @@ export interface ProbeInfo {
   heights: number[];
 }
 
-export type DownloadStatus = "downloading" | "done" | "error" | "cancelled";
-
-export interface DownloadProgress {
-  jobId: number;
-  percent: number | null;
-  downloadedBytes: number | null;
-  totalBytes: number | null;
-  speedBps: number | null;
-  etaSecs: number | null;
-  status: DownloadStatus;
-  filePath: string | null;
-  message: string | null;
-}
-
-export type CookiesMode = "none" | "browser" | "file";
-
-export interface Settings {
-  cookiesMode: CookiesMode;
-  cookiesBrowser: string | null;
-  cookiesFile: string | null;
-}
-
-export interface BrowserInfo {
-  id: string;
-  label: string;
-}
-
-export interface EngineInfo {
-  ytdlpVersion: string | null;
-  jsRuntime: string | null;
-  ffmpegPath: string | null;
-  ffmpegVersion: string | null;
-}
+export type JobStatus =
+  | "queued"
+  | "downloading"
+  | "processing"
+  | "paused"
+  | "done"
+  | "error"
+  | "cancelled";
 
 export type MediaMode = "video" | "audio";
 
@@ -55,4 +30,41 @@ export interface DownloadOptions {
   normalizeAudio: boolean;
   embedMetadata: boolean;
   embedThumbnail: boolean;
+}
+
+/** Un trabajo de la cola, tal como lo reporta el backend. */
+export interface QueueJob {
+  id: number;
+  url: string;
+  title: string;
+  options: DownloadOptions;
+  status: JobStatus;
+  percent: number | null;
+  downloadedBytes: number | null;
+  totalBytes: number | null;
+  speedBps: number | null;
+  etaSecs: number | null;
+  filePath: string | null;
+  message: string | null;
+}
+
+export type CookiesMode = "none" | "browser" | "file";
+
+export interface Settings {
+  cookiesMode: CookiesMode;
+  cookiesBrowser: string | null;
+  cookiesFile: string | null;
+  concurrency: number;
+}
+
+export interface BrowserInfo {
+  id: string;
+  label: string;
+}
+
+export interface EngineInfo {
+  ytdlpVersion: string | null;
+  jsRuntime: string | null;
+  ffmpegPath: string | null;
+  ffmpegVersion: string | null;
 }
