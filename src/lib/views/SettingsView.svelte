@@ -215,6 +215,18 @@
           </span>
         {/if}
       </div>
+      <div class="flex items-center justify-between py-0.5">
+        <span class="text-gray-500">ffmpeg (conversión y audio)</span>
+        {#if engine?.ffmpegVersion}
+          <span class="font-mono text-xs text-emerald-400">
+            {engine.ffmpegVersion} ✓
+          </span>
+        {:else}
+          <span class="text-xs text-amber-400">
+            no detectado — instálalo para convertir formatos
+          </span>
+        {/if}
+      </div>
     </div>
   </section>
 

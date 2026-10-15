@@ -37,8 +37,10 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 - 🎯 **Pega el link y listo** — detecta la plataforma, muestra preview (thumbnail, título, duración, canal)
 - 🍪 **Cookies del navegador** — usa tu sesión de Brave/Firefox/Chrome para YouTube y contenido restringido
 - 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
-- 🎞️ **Selector de formatos visual** — tabs Video / Audio / Personalizado, sin IDs crípticos
-- ⚡ **Presets** — "MP3 320k", "1080p MP4", "máxima calidad" en un click
+- 🎞️ **Selector de formatos visual** — resoluciones reales del enlace, contenedores MP4/MKV/WEBM
+- 🎵 **Todos los formatos de audio** — MP3, M4A, OGG, OPUS, FLAC, WAV u original sin recomprimir
+- 🔊 **Control de volumen** — sube o baja ±20 dB y normaliza el audio con ffmpeg
+- ⚡ **Presets de un click** — Máxima calidad, Video 1080p, MP3 320k, FLAC, Audio original
 - 📋 **Cola inteligente** — drag & drop, pausar item individual, descargas concurrentes configurables
 - ✂️ **Recortar clips** — define inicio/fin antes de descargar, sin transcodificar de más
 - 🏷️ **Metadatos automáticos** — título, artista e imagen incrustados en archivos de audio
@@ -127,9 +129,12 @@ downlink/
 - [ ] Descarga simple con barra de progreso en tiempo real
 
 ### v0.2 — Cola y formatos
+- [x] Selector de formatos visual (video/audio, resoluciones reales)
+- [x] Contenedores MP4/MKV/WEBM + códecs compatibles en MP4
+- [x] Formatos de audio (MP3/M4A/OGG/OPUS/FLAC/WAV/original)
+- [x] Control de volumen y normalización (ffmpeg)
+- [x] Presets configurables
 - [ ] Cola con drag & drop, pausa/cancelar, concurrencia
-- [ ] Selector de formatos visual (video/audio/personalizado)
-- [ ] Presets configurables
 
 ### v0.3 — Extras
 - [ ] Playlists y canales (expansión y selección de items)

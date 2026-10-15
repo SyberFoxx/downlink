@@ -7,6 +7,23 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-15
+
+### Added
+- **Selector de formatos visual**: pestañas Video / Solo audio con las resoluciones reales del enlace
+- **Contenedores**: MP4 (H.264+AAC forzado para compatibilidad), MKV y WEBM
+- **Formatos de audio**: MP3, M4A/AAC, OGG/Vorbis, OPUS, FLAC, WAV y «Original» (sin recomprimir)
+- **Calidad de audio**: 320 / 256 / 192 / 128 kbps
+- **Control de volumen** (±20 dB) y **normalización** (loudnorm a -16 LUFS) vía ffmpeg
+- **Metadatos y miniatura incrustados** en audio y video
+- **Presets de un click**: Máxima calidad, Video 1080p, MP3 320k, FLAC, Audio original
+- Resumen de opciones en cada fila de descarga y estado de ffmpeg en Ajustes
+- 9 tests nuevos del armado de argumentos (16 en total)
+
+### Notes
+- El ajuste de volumen en **video** requiere re-codificar (`--recode-video`): se avisa en la UI
+- En MP4 se prefiere H.264 + AAC; en MKV/WEBM se conservan los códecs originales
+
 ## [0.1.1] - 2026-10-15
 
 ### Added

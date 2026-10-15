@@ -63,6 +63,8 @@ pub fn detect_browsers() -> Vec<BrowserInfo> {
 pub struct EngineInfo {
     pub ytdlp_version: Option<String>,
     pub js_runtime: Option<String>,
+    pub ffmpeg_path: Option<String>,
+    pub ffmpeg_version: Option<String>,
 }
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {

@@ -4,10 +4,9 @@
 
   interface Props {
     info: ProbeInfo;
-    onDownload: () => void;
   }
 
-  let { info, onDownload }: Props = $props();
+  let { info }: Props = $props();
 </script>
 
 <div
@@ -50,16 +49,12 @@
       {/if}
     </div>
 
-    <div class="mt-auto flex items-center justify-end pt-3">
-      <button
-        class="flex items-center gap-1.5 rounded-md bg-violet-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm shadow-violet-600/30 transition-colors hover:bg-violet-500 active:bg-violet-600"
-        onclick={onDownload}
-      >
-        <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-        </svg>
-        Descargar
-      </button>
+    <div class="mt-auto flex items-center justify-end gap-2 pt-3">
+      {#if info.heights.length > 0}
+        <span class="rounded-full border border-gray-800 px-2 py-0.5 text-[10px] text-gray-500">
+          hasta {info.heights[0]}p
+        </span>
+      {/if}
     </div>
   </div>
 </div>

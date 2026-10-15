@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   BrowserInfo,
+  DownloadOptions,
   DownloadProgress,
   EngineInfo,
   ProbeInfo,
@@ -13,8 +14,11 @@ export function probeUrl(url: string): Promise<ProbeInfo> {
   return invoke<ProbeInfo>("probe_url", { url });
 }
 
-export function startDownload(url: string): Promise<number> {
-  return invoke<number>("start_download", { url });
+export function startDownload(
+  url: string,
+  options: DownloadOptions,
+): Promise<number> {
+  return invoke<number>("start_download", { url, options });
 }
 
 export function cancelDownload(jobId: number): Promise<void> {

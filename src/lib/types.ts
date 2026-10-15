@@ -6,6 +6,7 @@ export interface ProbeInfo {
   webpageUrl: string;
   extractor: string | null;
   formatsCount: number;
+  heights: number[];
 }
 
 export type DownloadStatus = "downloading" | "done" | "error" | "cancelled";
@@ -38,4 +39,20 @@ export interface BrowserInfo {
 export interface EngineInfo {
   ytdlpVersion: string | null;
   jsRuntime: string | null;
+  ffmpegPath: string | null;
+  ffmpegVersion: string | null;
+}
+
+export type MediaMode = "video" | "audio";
+
+export interface DownloadOptions {
+  mode: MediaMode;
+  videoHeight: number | null;
+  container: string | null;
+  audioFormat: string | null;
+  audioQuality: string | null;
+  volumeDb: number | null;
+  normalizeAudio: boolean;
+  embedMetadata: boolean;
+  embedThumbnail: boolean;
 }

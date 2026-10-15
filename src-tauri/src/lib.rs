@@ -38,7 +38,11 @@ async fn probe_url(app: tauri::AppHandle, url: String) -> Result<ytdlp::ProbeInf
 /// Inicia una descarga en la carpeta de Descargas del usuario.
 /// Devuelve el id del trabajo; el progreso llega por el evento `download-progress`.
 #[tauri::command]
-async fn start_download(app: tauri::AppHandle, url: String) -> Result<u64, String> {
+async fn start_download(
+    app: tauri::AppHandle,
+    url: String,
+    options: ytdlp::DownloadOptions,
+) -> Result<u64, String> {
     let settings = app.state::<SettingsState>().0.lock().await.clone();
     let job_id = app.state::<JobCounter>().0.fetch_add(1, Ordering::SeqCst) + 1;
     let out_dir = app
@@ -46,7 +50,7 @@ async fn start_download(app: tauri::AppHandle, url: String) -> Result<u64, Strin
         .download_dir()
         .map_err(|_| "No se encontró la carpeta de Descargas.".to_string())?;
     let jobs = app.state::<Jobs>().0.clone();
-    ytdlp::spawn_download(app, job_id, url, out_dir, jobs, settings).await?;
+    ytdlp::spawn_download(app, job_id, url, out_dir, jobs, settings, options).await?;
     Ok(job_id)
 }
 

@@ -8,11 +8,15 @@
   } from "$lib/api";
   import type { DownloadProgress, ProbeInfo } from "$lib/types";
   import PreviewCard from "$lib/components/PreviewCard.svelte";
+  import OptionsPanel from "$lib/components/OptionsPanel.svelte";
   import DownloadRow from "$lib/components/DownloadRow.svelte";
+  import { defaultOptions, summarizeOptions } from "$lib/options";
+  import type { DownloadOptions } from "$lib/types";
 
   interface Job {
     id: number;
     title: string;
+    subtitle: string;
     progress: DownloadProgress | null;
   }
 
@@ -28,6 +32,7 @@
   let probe = $state<ProbeInfo | null>(null);
   let jobs = $state<Job[]>([]);
   let starting = $state(false);
+  let options = $state<DownloadOptions>(defaultOptions());
 
   let needsCookies = $derived(
     !!errorMessage &&
@@ -60,9 +65,18 @@
     if (!probe || starting) return;
     starting = true;
     errorMessage = null;
+    const snapshot = $state.snapshot(options);
     try {
-      const jobId = await startDownload(probe.webpageUrl);
-      jobs = [{ id: jobId, title: probe.title, progress: null }, ...jobs];
+      const jobId = await startDownload(probe.webpageUrl, snapshot);
+      jobs = [
+        {
+          id: jobId,
+          title: probe.title,
+          subtitle: summarizeOptions(snapshot),
+          progress: null,
+        },
+        ...jobs,
+      ];
       probe = null;
       url = "";
     } catch (e) {
@@ -172,7 +186,8 @@
   <!-- Preview del enlace analizado -->
   {#if probe}
     <div class="mt-6">
-      <PreviewCard info={probe} onDownload={download} />
+      <PreviewCard info={probe} />
+      <OptionsPanel info={probe} {options} onDownload={download} {starting} />
     </div>
   {/if}
 

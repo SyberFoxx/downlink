@@ -5,6 +5,7 @@
   interface Job {
     id: number;
     title: string;
+    subtitle: string;
     progress: DownloadProgress | null;
   }
 
@@ -53,6 +54,9 @@
     <!-- Título y meta -->
     <div class="min-w-0 flex-1">
       <p class="truncate text-sm text-gray-200">{job.title}</p>
+      {#if job.subtitle}
+        <p class="mt-0.5 truncate text-[11px] text-gray-600">{job.subtitle}</p>
+      {/if}
       {#if status === "downloading"}
         <p class="mt-0.5 text-xs text-gray-500">
           {#if percent != null}
