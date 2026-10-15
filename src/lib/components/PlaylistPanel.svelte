@@ -4,13 +4,16 @@
 
   interface Props {
     entries: PlaylistEntry[];
-    selected: Set<string>;
-    onToggle: (id: string) => void;
+    /** Índices seleccionados (no ids: las radios pueden repetir vídeos). */
+    selected: Set<number>;
+    truncated?: boolean;
+    onToggle: (index: number) => void;
     onAll: () => void;
     onNone: () => void;
   }
 
-  let { entries, selected, onToggle, onAll, onNone }: Props = $props();
+  let { entries, selected, truncated = false, onToggle, onAll, onNone }: Props =
+    $props();
 
   let count = $derived(entries.length);
   let allSelected = $derived(selected.size === count);
@@ -32,16 +35,22 @@
     </button>
   </div>
 
+  {#if truncated}
+    <p class="border-b border-gray-800/40 bg-gray-900/40 px-4 py-2 text-[11px] text-amber-500/80">
+      Es una radio de YouTube: se listan los primeros {count} vídeos.
+    </p>
+  {/if}
+
   <div class="max-h-80 overflow-y-auto">
-    {#each entries as entry, index (entry.id || index)}
+    {#each entries as entry, index (index)}
       <label
         class="flex cursor-pointer items-center gap-3 border-b border-gray-800/40 px-4 py-2 transition-colors last:border-b-0 hover:bg-gray-800/20"
       >
         <input
           type="checkbox"
           class="size-3.5 shrink-0 accent-violet-600"
-          checked={selected.has(entry.id)}
-          onchange={() => onToggle(entry.id)}
+          checked={selected.has(index)}
+          onchange={() => onToggle(index)}
         />
         <span class="w-6 shrink-0 text-right text-[11px] tabular-nums text-gray-600">
           {index + 1}

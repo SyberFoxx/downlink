@@ -12,6 +12,10 @@ const FILE_TEMPLATE: &str = "after_move:__FILE__%(filepath)s";
 const JS_RUNTIMES: [&str; 4] = ["deno", "node", "bun", "qjs"];
 const NORMALIZE_FILTER: &str = "loudnorm=I=-16:TP=-1.5:LRA=11";
 
+/// Tope de elementos al listar una radio/mix de YouTube. Son listas
+/// autogeneradas que repiten vídeos y pueden ser casi infinitas.
+const RADIO_PLAYLIST_LIMIT: usize = 50;
+
 pub fn ytdlp_bin() -> String {
     std::env::var("DOWNLINK_YTDLP").unwrap_or_else(|_| "yt-dlp".to_string())
 }
@@ -40,6 +44,17 @@ fn which(bin: &str) -> Option<PathBuf> {
 fn is_youtube(url: &str) -> bool {
     let url = url.to_lowercase();
     url.contains("youtube.com") || url.contains("youtu.be")
+}
+
+/// ¿Es una «radio»/«mix» autogenerada de YouTube (`list=RD…`, `start_radio=1`)?
+/// Esas listas se generan al vuelo, repiten vídeos y pueden no tener fin, así
+/// que conviene limitarlas al listarlas.
+fn is_youtube_radio(url: &str) -> bool {
+    if !is_youtube(url) {
+        return false;
+    }
+    let url = url.to_lowercase();
+    url.contains("start_radio=1") || url.contains("list=rd")
 }
 
 /// Argumentos comunes a todas las invocaciones de yt-dlp.
@@ -273,6 +288,8 @@ pub struct ProbeInfo {
     pub heights: Vec<u32>,
     /// Elementos de la playlist (vacío si es un video suelto).
     pub entries: Vec<PlaylistEntry>,
+    /// `true` si la lista se recortó (p. ej. una radio de YouTube sin fin).
+    pub truncated: bool,
 }
 
 /// Traduce errores de yt-dlp a mensajes accionables para el usuario.
@@ -301,14 +318,7 @@ pub(crate) fn friendly_error(stderr: &str) -> String {
 /// Consulta los metadatos de un enlace sin descargar nada.
 /// Usa `--flat-playlist` para listar playlists enteras muy rápido.
 pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> {
-    let mut args = common_args(settings, url);
-    args.extend([
-        "--skip-download".into(),
-        "--flat-playlist".into(),
-        "--no-warnings".into(),
-        "--dump-single-json".into(),
-        url.to_string(),
-    ]);
+    let args = probe_args(settings, url);
 
     let output = tokio::time::timeout(
         Duration::from_secs(120),
@@ -329,6 +339,7 @@ pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> 
         .map_err(|_| "yt-dlp devolvió una respuesta inválida.".to_string())?;
 
     let entries = playlist_entries(&json, url);
+    let radio = is_youtube_radio(url);
 
     Ok(ProbeInfo {
         kind: if entries.is_empty() {
@@ -364,8 +375,28 @@ pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> 
             .map(|f| f.len())
             .unwrap_or(0),
         heights: available_heights(&json),
+        truncated: radio && entries.len() >= RADIO_PLAYLIST_LIMIT,
         entries,
     })
+}
+
+/// Argumentos del sondeo. Limita las radios de YouTube, que no tienen fin.
+fn probe_args(settings: &Settings, url: &str) -> Vec<String> {
+    let mut args = common_args(settings, url);
+    args.extend([
+        "--skip-download".into(),
+        "--flat-playlist".into(),
+        "--no-warnings".into(),
+    ]);
+
+    if is_youtube_radio(url) {
+        args.push("--playlist-end".into());
+        args.push(RADIO_PLAYLIST_LIMIT.to_string());
+    }
+
+    args.push("--dump-single-json".into());
+    args.push(url.to_string());
+    args
 }
 
 /// Mejor miniatura disponible en un objeto de yt-dlp.
@@ -382,6 +413,8 @@ fn thumbnail_url(json: &serde_json::Value) -> Option<String> {
 }
 
 /// Elementos de una playlist, si el JSON describe una.
+/// Se eliminan los repetidos por `id`: las radios/mixes de YouTube repiten
+/// vídeos y con claves duplicadas el listado del frontend se rompe.
 fn playlist_entries(json: &serde_json::Value, parent_url: &str) -> Vec<PlaylistEntry> {
     let is_playlist = json.get("_type").and_then(|v| v.as_str()) == Some("playlist")
         || json.get("entries").is_some_and(|v| v.is_array());
@@ -389,12 +422,14 @@ fn playlist_entries(json: &serde_json::Value, parent_url: &str) -> Vec<PlaylistE
         return Vec::new();
     }
 
+    let mut seen = std::collections::HashSet::new();
     json.get("entries")
         .and_then(|v| v.as_array())
         .map(|entries| {
             entries
                 .iter()
                 .filter_map(|entry| playlist_entry(entry, parent_url))
+                .filter(|entry| entry.id.is_empty() || seen.insert(entry.id.clone()))
                 .collect()
         })
         .unwrap_or_default()
@@ -685,6 +720,58 @@ mod tests {
         assert!(is_youtube("https://www.youtube.com/watch?v=x"));
         assert!(is_youtube("https://YOUTU.BE/x"));
         assert!(!is_youtube("https://vimeo.com/1"));
+    }
+
+    #[test]
+    fn detecta_radios_de_youtube() {
+        assert!(is_youtube_radio(
+            "https://www.youtube.com/watch?v=4iSvoQNfrrk&list=RD4iSvoQNfrrk&start_radio=1"
+        ));
+        assert!(is_youtube_radio(
+            "https://www.youtube.com/playlist?list=RDCLAK5uy_abc"
+        ));
+        assert!(!is_youtube_radio(
+            "https://www.youtube.com/playlist?list=PLabc"
+        ));
+        assert!(!is_youtube_radio("https://vimeo.com/album/1/start_radio=1"));
+    }
+
+    #[test]
+    fn limita_las_radios_al_sondear() {
+        let radio = probe_args(
+            &no_cookies(),
+            "https://www.youtube.com/watch?v=x&list=RDx&start_radio=1",
+        );
+        assert!(
+            radio.windows(2).any(|w| w == ["--playlist-end", "50"]),
+            "la radio debería limitar el número de elementos"
+        );
+
+        let playlist = probe_args(&no_cookies(), "https://www.youtube.com/playlist?list=PLabc");
+        assert!(!playlist.iter().any(|a| a == "--playlist-end"));
+        assert_eq!(
+            playlist.last().unwrap(),
+            "https://www.youtube.com/playlist?list=PLabc"
+        );
+    }
+
+    #[test]
+    fn elimina_entradas_repetidas_de_la_playlist() {
+        let json = serde_json::json!({
+            "_type": "playlist",
+            "entries": [
+                { "id": "aaa", "title": "Primera" },
+                { "id": "bbb", "title": "Segunda" },
+                { "id": "aaa", "title": "Primera (repetida)" },
+                { "id": "ccc", "title": "Tercera" }
+            ]
+        });
+        let entries = playlist_entries(&json, "https://www.youtube.com/playlist?list=RD1");
+        assert_eq!(
+            entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+            vec!["aaa", "bbb", "ccc"]
+        );
+        assert_eq!(entries[0].title, "Primera");
     }
 
     #[test]

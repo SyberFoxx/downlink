@@ -7,6 +7,12 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-15
+
+### Fixed
+- **Las radios/mixes de YouTube (`list=RD…`, `start_radio=1`) colgaban la vista al analizarlas**: devuelven cientos de elementos con vídeos repetidos, y las claves duplicadas rompían el listado de la playlist. Ahora las entradas se **deduplican por id** y el listado usa el índice como clave
+- Las radios se **limitan a 50 elementos** (`--playlist-end`): son listas autogeneradas, repiten canciones y pueden ser casi infinitas. Se avisa en la UI de que la lista está recortada
+
 ## [0.4.0] - 2026-10-15
 
 ### Added

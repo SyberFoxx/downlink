@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.4.0**
+- Versión actual: **0.4.1**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -144,6 +144,17 @@ Protocolo de línea sobre stdout de yt-dlp (en `ytdlp.rs` → `parse_line`):
 Las entradas de YouTube solo traen el id, así que `entry_url` construye
 `https://www.youtube.com/watch?v=<id>` cuando la URL no es absoluta. La descarga
 sigue siendo por vídeo suelto (`--no-playlist` en `build_download_args`).
+
+Dos salvaguardas en `playlist_entries` / `probe_args`:
+
+- **Deduplicación por `id`**: las radios/mixes de YouTube repiten vídeos. Con ids
+  repetidos las claves del `{#each}` chocaban y rompían la vista.
+- **Tope de radios** (`RADIO_PLAYLIST_LIMIT = 50`): `is_youtube_radio` detecta
+  `list=RD…` / `start_radio=1` y añade `--playlist-end 50`; son listas
+  autogeneradas que pueden no tener fin. `ProbeInfo.truncated` avisa a la UI.
+
+La selección en el frontend es **por índice** (`Set<number>`), no por id, para no
+depender de que los ids sean únicos.
 
 ### Esquema de argumentos
 

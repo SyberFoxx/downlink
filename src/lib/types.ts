@@ -19,6 +19,8 @@ export interface ProbeInfo {
   formatsCount: number;
   heights: number[];
   entries: PlaylistEntry[];
+  /** `true` si la lista se recortó (p. ej. una radio de YouTube sin fin). */
+  truncated: boolean;
 }
 
 export type JobStatus =

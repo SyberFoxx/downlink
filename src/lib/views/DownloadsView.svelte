@@ -35,7 +35,7 @@
   let options = $state<DownloadOptions>(defaultOptions());
   let adding = $state(0);
   let dropActive = $state(false);
-  let selectedIds = $state<Set<string>>(new Set());
+  let selectedIndices = $state<Set<number>>(new Set());
 
   const STATUS_ORDER: Record<QueueJob["status"], number> = {
     downloading: 0,
@@ -66,7 +66,7 @@
 
   let downloadLabel = $derived(
     probe?.kind === "playlist"
-      ? `Descargar ${selectedIds.size} vídeo${selectedIds.size === 1 ? "" : "s"}`
+      ? `Descargar ${selectedIndices.size} vídeo${selectedIndices.size === 1 ? "" : "s"}`
       : "Descargar",
   );
 
@@ -90,9 +90,9 @@
     probe = null;
     try {
       probe = await probeUrl(target);
-      selectedIds =
+      selectedIndices =
         probe.kind === "playlist"
-          ? new Set(probe.entries.map((entry) => entry.id))
+          ? new Set(probe.entries.map((_, index) => index))
           : new Set();
     } catch (e) {
       errorMessage = extractError(e);
@@ -139,7 +139,7 @@
 
     const targets =
       probe.kind === "playlist"
-        ? probe.entries.filter((entry) => selectedIds.has(entry.id))
+        ? probe.entries.filter((_, index) => selectedIndices.has(index))
         : [{ url: probe.webpageUrl, title: probe.title }];
 
     if (targets.length === 0) return;
@@ -153,7 +153,7 @@
       }
       probe = null;
       url = "";
-      selectedIds = new Set();
+      selectedIndices = new Set();
     } catch (e) {
       errorMessage = extractError(e);
     } finally {
@@ -161,19 +161,19 @@
     }
   }
 
-  function toggleEntry(id: string) {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    selectedIds = next;
+  function toggleEntry(index: number) {
+    const next = new Set(selectedIndices);
+    if (next.has(index)) next.delete(index);
+    else next.add(index);
+    selectedIndices = next;
   }
 
   function selectAllEntries() {
-    selectedIds = new Set(probe?.entries.map((entry) => entry.id) ?? []);
+    selectedIndices = new Set(probe?.entries.map((_, index) => index) ?? []);
   }
 
   function selectNoEntries() {
-    selectedIds = new Set();
+    selectedIndices = new Set();
   }
 
   async function pause(id: number) {
@@ -386,7 +386,8 @@
       {#if probe.kind === "playlist"}
         <PlaylistPanel
           entries={probe.entries}
-          selected={selectedIds}
+          selected={selectedIndices}
+          truncated={probe.truncated}
           onToggle={toggleEntry}
           onAll={selectAllEntries}
           onNone={selectNoEntries}
@@ -398,7 +399,7 @@
         onDownload={download}
         {starting}
         label={downloadLabel}
-        disabled={probe.kind === "playlist" && selectedIds.size === 0}
+        disabled={probe.kind === "playlist" && selectedIndices.size === 0}
       />
     </div>
   {/if}
