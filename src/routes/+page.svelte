@@ -1,156 +1,173 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { onMount } from "svelte";
+  import { onDownloadProgress, probeUrl, startDownload, cancelDownload } from "$lib/api";
+  import type { DownloadProgress, ProbeInfo } from "$lib/types";
+  import PreviewCard from "$lib/components/PreviewCard.svelte";
+  import DownloadRow from "$lib/components/DownloadRow.svelte";
 
-  let name = $state("");
-  let greetMsg = $state("");
-
-  async function greet(event: Event) {
-    event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+  interface Job {
+    id: number;
+    title: string;
+    progress: DownloadProgress | null;
   }
+
+  let url = $state("");
+  let probing = $state(false);
+  let errorMessage = $state<string | null>(null);
+  let probe = $state<ProbeInfo | null>(null);
+  let jobs = $state<Job[]>([]);
+  let starting = $state(false);
+
+  function extractError(e: unknown): string {
+    if (typeof e === "string") return e;
+    if (e instanceof Error) return e.message;
+    return "Error inesperado";
+  }
+
+  async function analyze(raw?: string) {
+    const target = (raw ?? url).trim();
+    if (!target || probing) return;
+    url = target;
+    probing = true;
+    errorMessage = null;
+    probe = null;
+    try {
+      probe = await probeUrl(target);
+    } catch (e) {
+      errorMessage = extractError(e);
+    } finally {
+      probing = false;
+    }
+  }
+
+  async function download() {
+    if (!probe || starting) return;
+    starting = true;
+    errorMessage = null;
+    try {
+      const jobId = await startDownload(probe.webpageUrl);
+      jobs = [{ id: jobId, title: probe.title, progress: null }, ...jobs];
+      probe = null;
+      url = "";
+    } catch (e) {
+      errorMessage = extractError(e);
+    } finally {
+      starting = false;
+    }
+  }
+
+  async function cancel(jobId: number) {
+    try {
+      await cancelDownload(jobId);
+    } catch (e) {
+      errorMessage = extractError(e);
+    }
+  }
+
+  onMount(() => {
+    const unlisten = onDownloadProgress((progress) => {
+      jobs = jobs.map((j) => (j.id === progress.jobId ? { ...j, progress } : j));
+    });
+
+    const onPaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData("text")?.trim();
+      if (text && /^https?:\/\//i.test(text)) {
+        analyze(text);
+      }
+    };
+    window.addEventListener("paste", onPaste);
+
+    return () => {
+      unlisten.then((un) => un());
+      window.removeEventListener("paste", onPaste);
+    };
+  });
 </script>
 
-<main class="container">
-  <h1>Welcome to Tauri + Svelte</h1>
+<svelte:head>
+  <title>Downlink</title>
+</svelte:head>
 
-  <div class="row">
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo vite" alt="Vite Logo" />
-    </a>
-    <a href="https://tauri.app" target="_blank">
-      <img src="/tauri.svg" class="logo tauri" alt="Tauri Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank">
-      <img src="/svelte.svg" class="logo svelte-kit" alt="SvelteKit Logo" />
-    </a>
+<div class="mx-auto max-w-3xl px-10 py-12">
+  <header class="mb-8">
+    <h1 class="text-lg font-semibold tracking-tight text-gray-100">Descargar</h1>
+    <p class="mt-1 text-sm text-gray-500">
+      Pega un enlace de YouTube, TikTok, Instagram y +1800 sitios soportados
+    </p>
+  </header>
+
+  <!-- Input de URL -->
+  <div class="relative">
+    <svg
+      class="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-gray-500"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      stroke-width="2"
+    >
+      <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.687 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+    </svg>
+    <input
+      type="url"
+      bind:value={url}
+      placeholder="https://www.youtube.com/watch?v=..."
+      class="w-full rounded-lg border border-gray-800 bg-gray-900/50 py-3 pl-10 pr-28 text-sm text-gray-100 outline-none transition-colors placeholder:text-gray-600 focus:border-violet-600"
+      onkeydown={(e) => {
+        if (e.key === "Enter") analyze();
+      }}
+    />
+    <button
+      class="absolute right-1.5 top-1.5 bottom-1.5 rounded-md bg-violet-600 px-4 text-sm font-medium text-white shadow-sm shadow-violet-600/30 transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={probing || !url.trim()}
+      onclick={() => analyze()}
+    >
+      {#if probing}
+        <span class="flex items-center gap-2">
+          <svg class="size-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" />
+            <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v3a5 5 0 0 0-5 5H4z" />
+          </svg>
+          Analizando…
+        </span>
+      {:else}
+        Analizar
+      {/if}
+    </button>
   </div>
-  <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
 
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
-  <p>{greetMsg}</p>
-</main>
+  <p class="mt-2 text-xs text-gray-600">
+    Tip: pega el enlace directamente con <span class="font-mono text-gray-500">Ctrl+V</span> en
+    cualquier parte de la ventana
+  </p>
 
-<style>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
+  <!-- Error -->
+  {#if errorMessage}
+    <div
+      class="mt-4 rounded-lg border border-red-900/50 bg-red-950/30 px-4 py-3 text-sm text-red-400"
+    >
+      {errorMessage}
+    </div>
+  {/if}
 
-.logo.svelte-kit:hover {
-  filter: drop-shadow(0 0 2em #ff3e00);
-}
+  <!-- Preview del enlace analizado -->
+  {#if probe}
+    <div class="mt-6">
+      <PreviewCard info={probe} onDownload={download} />
+    </div>
+  {/if}
 
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
-
-</style>
+  <!-- Descargas -->
+  {#if jobs.length > 0}
+    <section class="mt-10">
+      <div class="mb-3 flex items-baseline justify-between">
+        <h2 class="text-sm font-medium text-gray-300">Descargas</h2>
+        <span class="text-xs text-gray-600">{jobs.length} en cola</span>
+      </div>
+      <div class="space-y-2">
+        {#each jobs as job (job.id)}
+          <DownloadRow {job} onCancel={cancel} />
+        {/each}
+      </div>
+    </section>
+  {/if}
+</div>
