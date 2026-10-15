@@ -30,7 +30,8 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 | Presets de un click | ✅ | ❌ | ✅ |
 | Cola con drag & drop | ✅ | ❌ | ❌ |
 | Historial con galería | ✅ | ⚠️ básico | ✅ |
-| Recorte de clips | 🚧 planeado | ❌ | ✅ |
+| Recorte de clips | ✅ | ❌ | ✅ |
+| Subtítulos (descarga e incrustado) | ✅ | ❌ | ✅ |
 | Auto-update de yt-dlp | 🚧 planeado | ❌ | ✅ |
 
 ## Características
@@ -57,12 +58,17 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 - ⚡ **Presets de un click** — Máxima calidad, Video 1080p, MP3 320k, FLAC, Audio original
 - 🏷️ **Metadatos automáticos** — título, artista e imagen incrustados en archivos de audio
 
+### Recorte y subtítulos
+- ✂️ **Recorta un fragmento** — indica inicio y fin (en `mm:ss` o `h:mm:ss`) y descarga solo esa parte
+- 💬 **Subtítulos** — descárgalos en los idiomas que quieras (`es,en`…), incluidos los automáticos
+- 🧩 **Incrustados o como archivo** — embébelos en el vídeo (MP4/MKV) o déjalos como `.srt` sueltos
+
 ### Motor y compatibilidad
 - 🍪 **Cookies del navegador** — usa tu sesión de Brave/Firefox/Chrome para YouTube y contenido restringido
 - 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
 - 🔧 **Estado del motor** — yt-dlp, runtime JS y ffmpeg detectados y probados desde Ajustes
 
-En el [roadmap](#roadmap): recorte de clips, subtítulos, tema claro y auto-update de yt-dlp.
+En el [roadmap](#roadmap): tema claro, empaquetado de yt-dlp/ffmpeg, system tray e instaladores.
 
 ## Tech Stack
 
@@ -173,9 +179,9 @@ downlink/
 - [x] Historial con galería, búsqueda y re-descarga
 - [x] Persistencia local de lo descargado
 
-### v0.6 — Recorte y subtítulos
-- [ ] Recorte de clips (`--download-sections`)
-- [ ] Subtítulos (descarga e incrustado)
+### v0.6 — Recorte y subtítulos ✅
+- [x] Recorte de clips (`--download-sections`)
+- [x] Subtítulos (descarga e incrustado)
 
 ### v0.7 — Madurez
 - [ ] Tema claro

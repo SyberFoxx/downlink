@@ -19,7 +19,41 @@ export function defaultOptions(): DownloadOptions {
     normalizeAudio: false,
     embedMetadata: true,
     embedThumbnail: true,
+    clipStart: null,
+    clipEnd: null,
+    subtitles: false,
+    subtitleLangs: "es",
+    subtitleAuto: true,
+    embedSubtitles: true,
   };
+}
+
+/** Segundos → "mm:ss" o "h:mm:ss" (para mostrar en la UI). */
+export function formatTimecode(seconds?: number | null): string {
+  if (seconds == null || !isFinite(seconds) || seconds < 0) return "";
+  const total = Math.floor(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  return (h > 0 ? `${h}:` : "") + `${mm}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * Interpreta "90", "1:30" o "1:02:03" como segundos. Devuelve `null` si el
+ * texto está vacío o no es un tiempo válido.
+ */
+export function parseTimecode(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(":");
+  if (parts.length > 3) return null;
+  const numbers: number[] = [];
+  for (const part of parts) {
+    if (!/^\d+(\.\d+)?$/.test(part.trim())) return null;
+    numbers.push(Number(part));
+  }
+  return numbers.reduce((acc, value) => acc * 60 + value, 0);
 }
 
 export const VIDEO_CONTAINERS = [
@@ -159,6 +193,15 @@ export function summarizeOptions(options: DownloadOptions): string {
   }
   if (options.normalizeAudio) parts.push("normalizado");
   if (options.embedMetadata || options.embedThumbnail) parts.push("con metadatos");
+
+  if (options.clipStart != null) {
+    const end =
+      options.clipEnd != null ? formatTimecode(options.clipEnd) : "final";
+    parts.push(`recorte ${formatTimecode(options.clipStart)}–${end}`);
+  }
+  if (options.subtitles) {
+    parts.push(options.embedSubtitles ? "subs incrustados" : "subtítulos");
+  }
 
   return parts.join(" · ");
 }

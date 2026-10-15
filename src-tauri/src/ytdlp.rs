@@ -133,6 +133,24 @@ pub struct DownloadOptions {
     pub embed_metadata: bool,
     #[serde(default)]
     pub embed_thumbnail: bool,
+    /// Recorte: segundo en el que empieza el fragmento.
+    #[serde(default)]
+    pub clip_start: Option<f64>,
+    /// Recorte: segundo en el que termina (None = hasta el final).
+    #[serde(default)]
+    pub clip_end: Option<f64>,
+    /// Descarga los subtítulos del vídeo.
+    #[serde(default)]
+    pub subtitles: bool,
+    /// Idiomas de subtítulos separados por coma (p. ej. "es,en").
+    #[serde(default)]
+    pub subtitle_langs: Option<String>,
+    /// Incluye los subtítulos automáticos (generados por el sitio).
+    #[serde(default)]
+    pub subtitle_auto: bool,
+    /// Incrusta los subtítulos en el vídeo en vez de dejar archivos .srt.
+    #[serde(default)]
+    pub embed_subtitles: bool,
 }
 
 impl DownloadOptions {
@@ -154,6 +172,27 @@ impl DownloadOptions {
     fn needs_audio_reencode(&self) -> bool {
         !self.audio_filters().is_empty()
     }
+
+    /// Sección de recorte para `--download-sections` (formato `*inicio-fin`).
+    fn clip_section(&self) -> Option<String> {
+        let start = self.clip_start?;
+        let end = self
+            .clip_end
+            .map(timecode)
+            .unwrap_or_else(|| "inf".to_string());
+        Some(format!("*{}-{end}", timecode(start)))
+    }
+}
+
+/// Convierte segundos a `HH:MM:SS` (formato que acepta yt-dlp).
+fn timecode(seconds: f64) -> String {
+    let total = seconds.max(0.0).round() as u64;
+    format!(
+        "{:02}:{:02}:{:02}",
+        total / 3600,
+        (total % 3600) / 60,
+        total % 60
+    )
 }
 
 /// Cadena de selección de formato (`-f`) para video.
@@ -185,6 +224,38 @@ pub fn build_download_args(
         "--output".into(),
         "%(title)s [%(id)s].%(ext)s".into(),
     ]);
+
+    // Recorte de un fragmento.
+    if let Some(section) = options.clip_section() {
+        args.push("--download-sections".into());
+        args.push(section);
+    }
+
+    // Subtítulos (descarga y, opcionalmente, incrustado).
+    if options.subtitles {
+        args.push("--write-subs".into());
+        if options.subtitle_auto {
+            args.push("--write-auto-subs".into());
+        }
+        args.push("--sub-langs".into());
+        args.push(
+            options
+                .subtitle_langs
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("es")
+                .to_string(),
+        );
+
+        // Incrustar solo tiene sentido en vídeo; en audio se dejan los .srt.
+        if options.embed_subtitles && options.mode == MediaMode::Video {
+            args.push("--embed-subs".into());
+        } else {
+            args.push("--convert-subs".into());
+            args.push("srt".into());
+        }
+    }
 
     let filters = options.audio_filters();
 
@@ -917,6 +988,126 @@ mod tests {
         let options = DownloadOptions::default();
         let args = build_download_args(&no_cookies(), "https://vimeo.com/999", &options);
         assert_eq!(args.last().unwrap(), "https://vimeo.com/999");
+    }
+
+    #[test]
+    fn recorta_con_secciones() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            clip_start: Some(65.0),
+            clip_end: Some(125.0),
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--download-sections", "*00:01:05-00:02:05"])
+        );
+        // No forzamos keyframes: re-codificaría con los códecs por defecto de ffmpeg
+        // y rompería la preferencia H.264/AAC del MP4.
+        assert!(!args.iter().any(|a| a == "--force-keyframes-at-cuts"));
+    }
+
+    #[test]
+    fn recorte_sin_fin_llega_hasta_el_final() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            clip_start: Some(30.0),
+            clip_end: None,
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(
+            args.iter().any(|a| a == "*00:00:30-inf"),
+            "esperaba el recorte abierto, args: {args:?}"
+        );
+    }
+
+    #[test]
+    fn recorte_en_audio_tambien_usa_secciones() {
+        let options = DownloadOptions {
+            mode: MediaMode::Audio,
+            audio_format: Some("mp3".into()),
+            clip_start: Some(10.0),
+            clip_end: Some(20.0),
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--download-sections", "*00:00:10-00:00:20"])
+        );
+    }
+
+    #[test]
+    fn sin_recorte_no_pasa_download_sections() {
+        let options = DownloadOptions::default();
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(!args.iter().any(|a| a == "--download-sections"));
+    }
+
+    #[test]
+    fn subtitulos_incrustados_en_video() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            subtitles: true,
+            subtitle_langs: Some("es,en".into()),
+            subtitle_auto: true,
+            embed_subtitles: true,
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(args.iter().any(|a| a == "--write-subs"));
+        assert!(args.iter().any(|a| a == "--write-auto-subs"));
+        assert!(args.windows(2).any(|w| w == ["--sub-langs", "es,en"]));
+        assert!(args.iter().any(|a| a == "--embed-subs"));
+        assert!(!args.iter().any(|a| a == "--convert-subs"));
+    }
+
+    #[test]
+    fn subtitulos_como_archivos_srt() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            subtitles: true,
+            subtitle_langs: None,
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        // Idioma por defecto cuando no se indica.
+        assert!(args.windows(2).any(|w| w == ["--sub-langs", "es"]));
+        assert!(!args.iter().any(|a| a == "--embed-subs"));
+        assert!(args.windows(2).any(|w| w == ["--convert-subs", "srt"]));
+    }
+
+    #[test]
+    fn subtitulos_en_audio_no_se_incrustan() {
+        let options = DownloadOptions {
+            mode: MediaMode::Audio,
+            subtitles: true,
+            embed_subtitles: true,
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(!args.iter().any(|a| a == "--embed-subs"));
+        assert!(args.windows(2).any(|w| w == ["--convert-subs", "srt"]));
+    }
+
+    #[test]
+    fn sin_subtitulos_no_agrega_flags() {
+        let options = DownloadOptions::default();
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(!args.iter().any(|a| a == "--write-subs"));
+        assert!(!args.iter().any(|a| a == "--sub-langs"));
+        assert!(!args.iter().any(|a| a == "--embed-subs"));
+    }
+
+    #[test]
+    fn formatea_timecodes() {
+        assert_eq!(timecode(0.0), "00:00:00");
+        assert_eq!(timecode(65.0), "00:01:05");
+        assert_eq!(timecode(3725.0), "01:02:05");
+        // Redondea al segundo más cercano.
+        assert_eq!(timecode(4.6), "00:00:05");
     }
 
     #[test]

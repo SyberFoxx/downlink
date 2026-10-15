@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import type { DownloadOptions, ProbeInfo } from "$lib/types";
   import {
     AUDIO_FORMATS,
@@ -7,10 +8,13 @@
     PRESETS,
     availableHeightsFor,
     closestHeight,
+    formatTimecode,
+    parseTimecode,
     qualityApplies,
     summarizeOptions,
     type PresetId,
   } from "$lib/options";
+  import { formatDuration } from "$lib/utils";
 
   interface Props {
     info: ProbeInfo;
@@ -41,6 +45,33 @@
   ] as PresetId[]);
 
   let activePreset = $state<PresetId | null>(null);
+
+  // Recorte: texto editable en la UI, sincronizado a segundos en las opciones.
+  // `untrack` marca la lectura inicial de las opciones como intencionada.
+  let clipStartText = $state(untrack(() => formatTimecode(options.clipStart)));
+  let clipEndText = $state(untrack(() => formatTimecode(options.clipEnd)));
+
+  let clipError = $derived.by(() => {
+    const hasStart = clipStartText.trim() !== "";
+    const hasEnd = clipEndText.trim() !== "";
+    const start = hasStart ? parseTimecode(clipStartText) : null;
+    const end = hasEnd ? parseTimecode(clipEndText) : null;
+    if (hasStart && start == null)
+      return "Inicio inválido. Usa mm:ss o h:mm:ss.";
+    if (hasEnd && end == null) return "Fin inválido. Usa mm:ss o h:mm:ss.";
+    if (hasEnd && !hasStart) return "Indica el inicio del recorte.";
+    if (start != null && end != null && end <= start)
+      return "El fin debe ser mayor que el inicio.";
+    return null;
+  });
+
+  function syncClip() {
+    const start = clipStartText.trim() ? parseTimecode(clipStartText) : null;
+    let end = clipEndText.trim() ? parseTimecode(clipEndText) : null;
+    if (start != null && end != null && end <= start) end = null;
+    options.clipStart = start;
+    options.clipEnd = end;
+  }
 
   let heights = $derived(availableHeightsFor(info.heights));
   let resolution1080 = $derived(closestHeight(heights, 1080));
@@ -241,6 +272,112 @@
         Incrustar miniatura
       </label>
     </div>
+
+    <!-- Recorte -->
+    <div class="col-span-2 border-t border-gray-800/40 pt-3">
+      <div class="mb-1.5 flex items-baseline justify-between">
+        <span class="text-[11px] uppercase tracking-wide text-gray-500"
+          >Recorte</span
+        >
+        {#if options.clipStart != null || clipStartText || clipEndText}
+          <button
+            class="text-[11px] text-gray-500 transition-colors hover:text-gray-300"
+            onclick={() => {
+              clipStartText = "";
+              clipEndText = "";
+              syncClip();
+            }}
+          >
+            Limpiar
+          </button>
+        {/if}
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          inputmode="numeric"
+          placeholder="Inicio · 0:00"
+          aria-label="Inicio del recorte"
+          bind:value={clipStartText}
+          oninput={syncClip}
+          class="w-28 rounded-lg border bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600 focus:border-violet-600 {clipError
+            ? 'border-red-900/60'
+            : 'border-gray-800'}"
+        />
+        <span class="text-xs text-gray-600">→</span>
+        <input
+          type="text"
+          inputmode="numeric"
+          placeholder="Fin · final"
+          aria-label="Fin del recorte"
+          bind:value={clipEndText}
+          oninput={syncClip}
+          class="w-28 rounded-lg border bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600 focus:border-violet-600 {clipError
+            ? 'border-red-900/60'
+            : 'border-gray-800'}"
+        />
+        {#if info.duration}
+          <span class="text-[11px] text-gray-600">
+            el vídeo dura {formatDuration(info.duration)}
+          </span>
+        {/if}
+      </div>
+      {#if clipError}
+        <p class="mt-1 text-[11px] text-red-400">{clipError}</p>
+      {:else if options.clipStart != null}
+        <p class="mt-1 text-[11px] text-gray-600">
+          El corte se ajusta al fotograma clave más cercano (puede variar unas
+          décimas).
+        </p>
+      {/if}
+    </div>
+
+    <!-- Subtítulos (solo tiene sentido en vídeo) -->
+    {#if options.mode === "video"}
+      <div class="col-span-2 border-t border-gray-800/40 pt-3">
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <label
+            class="flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-wide text-gray-500"
+          >
+            <input
+              type="checkbox"
+              bind:checked={options.subtitles}
+              class="size-3.5 accent-violet-600"
+            />
+            Subtítulos
+          </label>
+          {#if options.subtitles}
+            <input
+              type="text"
+              placeholder="idiomas: es,en"
+              aria-label="Idiomas de subtítulos"
+              bind:value={options.subtitleLangs}
+              class="w-36 rounded-lg border border-gray-800 bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600 focus:border-violet-600"
+            />
+            <label
+              class="flex cursor-pointer items-center gap-2 text-xs text-gray-400"
+            >
+              <input
+                type="checkbox"
+                bind:checked={options.subtitleAuto}
+                class="size-3.5 accent-violet-600"
+              />
+              Automáticos
+            </label>
+            <label
+              class="flex cursor-pointer items-center gap-2 text-xs text-gray-400"
+            >
+              <input
+                type="checkbox"
+                bind:checked={options.embedSubtitles}
+                class="size-3.5 accent-violet-600"
+              />
+              Incrustar en el vídeo
+            </label>
+          {/if}
+        </div>
+      </div>
+    {/if}
 
     {#if reencodes}
       <p class="col-span-2 text-[11px] text-amber-400/90">

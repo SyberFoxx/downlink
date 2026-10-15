@@ -7,6 +7,17 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-15
+
+### Added
+- **Recorte de clips**: define un inicio y un fin para descargar solo el fragmento que quieres (p. ej. `1:30` → `2:15`) con `--download-sections`
+- **Subtítulos**: descarga los subtítulos del vídeo en los idiomas que indiques (`es,en`…), incluye los automáticos y permite **incrustarlos** en el archivo (MP4 → `mov_text`, MKV → `webvtt`) o dejarlos como `.srt`
+- Los tiempos del recorte aceptan `mm:ss`, `h:mm:ss` o segundos sueltos, con validación en la UI
+- 9 tests nuevos de argumentos (47 en total)
+
+### Changed
+- Las opciones de descarga (recorte y subtítulos) se guardan con el historial y se reutilizan al re-descargar
+
 ## [0.5.0] - 2026-10-15
 
 ### Added

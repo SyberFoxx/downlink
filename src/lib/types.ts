@@ -44,6 +44,18 @@ export interface DownloadOptions {
   normalizeAudio: boolean;
   embedMetadata: boolean;
   embedThumbnail: boolean;
+  /** Recorte: segundo de inicio del fragmento. */
+  clipStart: number | null;
+  /** Recorte: segundo de fin (null = hasta el final). */
+  clipEnd: number | null;
+  /** Descarga subtítulos. */
+  subtitles: boolean;
+  /** Idiomas de subtítulos separados por coma (p. ej. "es,en"). */
+  subtitleLangs: string;
+  /** Incluye subtítulos automáticos. */
+  subtitleAuto: boolean;
+  /** Incrusta los subtítulos en el vídeo en vez de dejar archivos .srt. */
+  embedSubtitles: boolean;
 }
 
 /** Un trabajo de la cola, tal como lo reporta el backend. */

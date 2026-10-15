@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.5.0**
+- Versión actual: **0.6.0**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -175,7 +175,11 @@ la galería, busca y re-descarga reutilizando las `options` guardadas.
 `build_download_args(settings, url, options)` arma todo. Los argumentos comunes (`common_args`) añaden cookies, runtime JS y EJS. `--ignore-config` **siempre** se pasa: se ignora el `yt-dlp.conf` del usuario a propósito.
 
 `DownloadOptions` (`camelCase` en JSON):
-`mode` (`"video" | "audio"`), `videoHeight`, `container`, `audioFormat`, `audioQuality`, `volumeDb`, `normalizeAudio`, `embedMetadata`, `embedThumbnail`.
+`mode` (`"video" | "audio"`), `videoHeight`, `container`, `audioFormat`, `audioQuality`, `volumeDb`, `normalizeAudio`, `embedMetadata`, `embedThumbnail`, `clipStart`, `clipEnd`, `subtitles`, `subtitleLangs`, `subtitleAuto`, `embedSubtitles`.
+
+- **Recorte**: `clipStart`/`clipEnd` (segundos, `f64`) → `--download-sections "*HH:MM:SS-HH:MM:SS"` (fin `inf` si falta). **No** se usa `--force-keyframes-at-cuts`: re-codifica con los códecs por defecto de ffmpeg (mpeg4) y rompería la preferencia H.264/AAC del MP4. El corte queda alineado a keyframes (puede variar unas décimas).
+- **Subtítulos**: `subtitles` activa `--write-subs` (+ `--write-auto-subs` si `subtitleAuto`) y `--sub-langs` (por defecto `es`). Con `embedSubtitles` (solo vídeo) usa `--embed-subs`; si no, `--convert-subs srt` para dejar `.srt` al lado. En audio nunca se incrustan.
+- Los campos nuevos llevan `#[serde(default)]` para que el `history.json` antiguo siga cargando.
 
 ## Convenciones de código
 
@@ -227,7 +231,7 @@ Resumen:
 - **v0.3** ✅ — cola inteligente: concurrencia, pausa/reanudar, reordenar arrastrando, pegado múltiple.
 - **v0.4** ✅ — playlists: detección, listado, selección y encolado.
 - **v0.5** ✅ — historial con galería, búsqueda y re-descarga + persistencia local.
-- **v0.6** — recorte de clips (`--download-sections`) y subtítulos.
+- **v0.6** ✅ — recorte de clips (`--download-sections`) y subtítulos (descarga e incrustado).
 - **v0.7** — madurez: tema claro, sidecars (empaquetar yt-dlp/ffmpeg) + auto-update, tray, instaladores.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
