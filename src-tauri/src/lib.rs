@@ -1,8 +1,8 @@
 mod ytdlp;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tauri::{Emitter, Manager};
 use tokio::process::Child;

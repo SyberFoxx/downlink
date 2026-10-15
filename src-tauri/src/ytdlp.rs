@@ -11,8 +11,7 @@ use tokio::sync::Mutex;
 
 pub const DOWNLOAD_EVENT: &str = "download-progress";
 
-const PROGRESS_TEMPLATE: &str =
-    "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.speed)s|%(progress.eta)s|%(progress.percent)s";
+const PROGRESS_TEMPLATE: &str = "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.speed)s|%(progress.eta)s|%(progress.percent)s";
 const FILE_TEMPLATE: &str = "after_move:__FILE__%(filepath)s";
 
 fn ytdlp_bin() -> String {
@@ -249,7 +248,6 @@ fn first_error_line(stderr: &str) -> Option<String> {
     stderr
         .lines()
         .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .next_back()
+        .rfind(|line| !line.is_empty())
         .map(String::from)
 }
