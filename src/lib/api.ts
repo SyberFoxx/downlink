@@ -5,10 +5,12 @@ import type {
   BrowserInfo,
   DownloadOptions,
   EngineInfo,
+  EngineUpdateProgress,
   HistoryEntry,
   ProbeInfo,
   QueueJob,
   Settings,
+  UpdateCheck,
 } from "./types";
 
 export function probeUrl(url: string): Promise<ProbeInfo> {
@@ -80,6 +82,22 @@ export function detectBrowsers(): Promise<BrowserInfo[]> {
 
 export function engineInfo(): Promise<EngineInfo> {
   return invoke<EngineInfo>("engine_info");
+}
+
+export function checkYtdlpUpdate(): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>("check_ytdlp_update");
+}
+
+export function updateYtdlp(): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>("update_ytdlp");
+}
+
+export function onEngineUpdate(
+  callback: (progress: EngineUpdateProgress) => void,
+): Promise<() => void> {
+  return listen<EngineUpdateProgress>("engine-update", (event) =>
+    callback(event.payload),
+  );
 }
 
 export async function pickCookiesFile(): Promise<string | null> {

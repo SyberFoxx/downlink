@@ -32,7 +32,7 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 | Historial con galería | ✅ | ⚠️ básico | ✅ |
 | Recorte de clips | ✅ | ❌ | ✅ |
 | Subtítulos (descarga e incrustado) | ✅ | ❌ | ✅ |
-| Auto-update de yt-dlp | 🚧 planeado | ❌ | ✅ |
+| Auto-update de yt-dlp | ✅ | ❌ | ✅ |
 
 ## Características
 
@@ -65,11 +65,12 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 
 ### Motor y compatibilidad
 - 🧩 **Detección del motor** — muestra de dónde sale cada binario (sistema, gestionado por Downlink o incluido con la app)
+- ⬆️ **Auto-update de yt-dlp** — descarga su propia copia desde los releases oficiales, la verifica (SHA-256 + ejecución) y la mantiene al día sola
 - 🍪 **Cookies del navegador** — usa tu sesión de Brave/Firefox/Chrome para YouTube y contenido restringido
 - 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
 - 🔧 **Estado del motor** — yt-dlp, runtime JS y ffmpeg detectados y probados desde Ajustes
 
-En el [roadmap](#roadmap): tema claro, empaquetado de yt-dlp/ffmpeg, system tray e instaladores.
+En el [roadmap](#roadmap): tema claro, auto-update de ffmpeg, empaquetado de yt-dlp/ffmpeg, system tray e instaladores.
 
 ## Tech Stack
 
@@ -101,7 +102,7 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
   libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
 
-Los binarios de `yt-dlp` y `ffmpeg` se empaquetan junto a la app (aún no — ver [roadmap](#roadmap)).
+Downlink descarga su propia copia de `yt-dlp` en la primera actualización (no necesitas instalarlo). `ffmpeg` y un runtime JS (`node`/`deno`) sí debes tenerlos en el sistema por ahora — ver [roadmap](#roadmap).
 
 ## Solución de problemas
 
@@ -139,6 +140,8 @@ downlink/
 │   │   ├── main.rs       # Entry point
 │   │   ├── lib.rs        # Setup de Tauri, comandos, gestión de jobs
 │   │   ├── queue.rs      # Cola de descargas (estados, concurrencia, orden)
+│   │   ├── engine.rs     # Resolución de yt-dlp/ffmpeg y su origen
+│   │   ├── updater.rs    # Descarga y auto-update de yt-dlp (GitHub releases)
 │   │   ├── history.rs    # Historial persistido (history.json)
 │   │   ├── settings.rs   # Ajustes persistidos y detección de navegadores
 │   │   └── ytdlp.rs      # Argumentos, probe y parser de yt-dlp
@@ -186,7 +189,8 @@ downlink/
 
 ### v0.7 — Madurez
 - [x] Detección del origen del motor (sidecar / gestionado / sistema)
-- [ ] Descarga y auto-update de yt-dlp/ffmpeg
+- [x] Descarga y auto-update de **yt-dlp**
+- [ ] Descarga y auto-update de ffmpeg
 - [ ] Tema claro
 - [ ] System tray con progreso + notificaciones
 - [ ] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS)

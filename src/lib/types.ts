@@ -94,6 +94,8 @@ export interface Settings {
   cookiesBrowser: string | null;
   cookiesFile: string | null;
   concurrency: number;
+  /** Busca y aplica actualizaciones de yt-dlp al arrancar. */
+  autoUpdateYtdlp: boolean;
 }
 
 export interface BrowserInfo {
@@ -109,4 +111,27 @@ export interface EngineInfo {
   ffmpegPath: string | null;
   ffmpegVersion: string | null;
   ffmpegSource: string | null;
+}
+
+/** Resultado de comprobar si hay una versión nueva de yt-dlp. */
+export interface UpdateCheck {
+  current: string | null;
+  latest: string | null;
+  updateAvailable: boolean;
+}
+
+export type EngineUpdatePhase =
+  | "checking"
+  | "downloading"
+  | "verifying"
+  | "installing"
+  | "done"
+  | "error";
+
+/** Progreso de la actualización del motor (evento `engine-update`). */
+export interface EngineUpdateProgress {
+  engine: string;
+  phase: EngineUpdatePhase;
+  percent: number | null;
+  message: string | null;
 }

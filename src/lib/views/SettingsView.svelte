@@ -1,22 +1,43 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import {
+    checkYtdlpUpdate,
     detectBrowsers,
     engineInfo,
     getSettings,
+    onEngineUpdate,
     pickCookiesFile,
     probeUrl,
     saveSettings,
+    updateYtdlp,
   } from "$lib/api";
-  import type { BrowserInfo, CookiesMode, EngineInfo, Settings } from "$lib/types";
+  import type {
+    BrowserInfo,
+    CookiesMode,
+    EngineInfo,
+    EngineUpdatePhase,
+    EngineUpdateProgress,
+    Settings,
+    UpdateCheck,
+  } from "$lib/types";
 
   const TEST_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+
+  const PHASE_LABELS: Record<EngineUpdatePhase, string> = {
+    checking: "Buscando actualización…",
+    downloading: "Descargando…",
+    verifying: "Verificando integridad…",
+    installing: "Instalando…",
+    done: "Actualizado ✓",
+    error: "Error",
+  };
 
   let settings = $state<Settings>({
     cookiesMode: "none",
     cookiesBrowser: null,
     cookiesFile: null,
     concurrency: 2,
+    autoUpdateYtdlp: true,
   });
   let browsers = $state<BrowserInfo[]>([]);
   let engine = $state<EngineInfo | null>(null);
@@ -26,6 +47,13 @@
 
   let testing = $state(false);
   let testResult = $state<{ ok: boolean; message: string } | null>(null);
+
+  let updateInfo = $state<UpdateCheck | null>(null);
+  let updateProgress = $state<EngineUpdateProgress | null>(null);
+  let checkingUpdate = $state(false);
+  let updating = $state(false);
+  let updateError = $state<string | null>(null);
+  let unlistenUpdate: (() => void) | null = null;
 
   const modes: { id: CookiesMode; label: string; description: string }[] = [
     {
@@ -46,19 +74,24 @@
   ];
 
   onMount(async () => {
-    const [loadedSettings, detected, info] = await Promise.all([
+    const [loadedSettings, detected, info, update] = await Promise.all([
       getSettings(),
       detectBrowsers(),
       engineInfo(),
+      checkYtdlpUpdate().catch(() => null),
     ]);
     settings = loadedSettings;
     browsers = detected;
     engine = info;
+    updateInfo = update;
     if (!settings.cookiesBrowser && detected.length > 0) {
       settings.cookiesBrowser = detected[0].id;
     }
     loaded = true;
+    unlistenUpdate = await onEngineUpdate(handleEngineUpdate);
   });
+
+  onDestroy(() => unlistenUpdate?.());
 
   async function save() {
     saving = true;
@@ -97,11 +130,68 @@
     }
   }
 
+  function handleEngineUpdate(progress: EngineUpdateProgress) {
+    updateProgress = progress;
+    if (progress.phase === "error") {
+      updateError = progress.message ?? "La actualización falló";
+      updating = false;
+    } else if (progress.phase === "done") {
+      updating = false;
+      // Refresca la versión y el origen mostrados en el motor.
+      engineInfo()
+        .then((info) => (engine = info))
+        .catch(() => {});
+      if (updateInfo) {
+        updateInfo = {
+          ...updateInfo,
+          current: updateInfo.latest,
+          updateAvailable: false,
+        };
+      }
+    } else {
+      updating = true;
+    }
+  }
+
+  async function checkUpdate() {
+    checkingUpdate = true;
+    updateError = null;
+    try {
+      updateInfo = await checkYtdlpUpdate();
+    } catch (e) {
+      updateError =
+        typeof e === "string" ? e : "No se pudo comprobar la actualización";
+    } finally {
+      checkingUpdate = false;
+    }
+  }
+
+  async function updateEngine() {
+    updating = true;
+    updateError = null;
+    updateProgress = null;
+    try {
+      updateInfo = await updateYtdlp();
+      engine = await engineInfo();
+      setTimeout(() => (updateProgress = null), 2500);
+    } catch (e) {
+      updateError = typeof e === "string" ? e : "La actualización falló";
+    } finally {
+      updating = false;
+    }
+  }
+
   let browserMissing = $derived(
     settings.cookiesMode === "browser" && browsers.length === 0,
   );
   let fileMissing = $derived(
     settings.cookiesMode === "file" && !settings.cookiesFile,
+  );
+  let updateLabel = $derived(
+    updateProgress ? PHASE_LABELS[updateProgress.phase] : "",
+  );
+  let updatePercent = $derived(
+    typeof updateProgress?.percent === "number" ? updateProgress.percent : null,
   );
 </script>
 
@@ -248,6 +338,65 @@
           </span>
         {/if}
       </div>
+    </div>
+
+    <!-- Actualización de yt-dlp -->
+    <div class="mt-3 rounded-lg border border-gray-800 bg-gray-900/30 px-3.5 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          {#if updating && updateProgress}
+            <p class="text-sm text-violet-300">{updateLabel}</p>
+          {:else if updateError}
+            <p class="text-sm text-red-400">{updateError}</p>
+          {:else if updateInfo?.updateAvailable}
+            <p class="text-sm text-amber-400">
+              Nueva versión disponible: {updateInfo.latest}
+            </p>
+          {:else if updateInfo}
+            <p class="text-sm text-gray-400">yt-dlp está al día</p>
+          {:else}
+            <p class="text-sm text-gray-400">Actualizar yt-dlp</p>
+          {/if}
+        </div>
+        <div class="flex shrink-0 gap-2">
+          <button
+            class="rounded-md border border-gray-800 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:bg-gray-900 disabled:opacity-50"
+            disabled={checkingUpdate || updating || !loaded}
+            onclick={checkUpdate}
+          >
+            {checkingUpdate ? "Buscando…" : "Buscar"}
+          </button>
+          {#if updateInfo?.updateAvailable}
+            <button
+              class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+              disabled={updating || !loaded}
+              onclick={updateEngine}
+            >
+              {updating ? "Actualizando…" : "Actualizar"}
+            </button>
+          {/if}
+        </div>
+      </div>
+
+      {#if updating && updatePercent !== null}
+        <div class="mt-2.5 h-1 overflow-hidden rounded-full bg-gray-800">
+          <div
+            class="h-full rounded-full bg-violet-600 transition-[width] duration-200"
+            style="width: {updatePercent}%"
+          ></div>
+        </div>
+      {/if}
+
+      <label class="mt-3 flex items-center gap-2">
+        <input
+          type="checkbox"
+          bind:checked={settings.autoUpdateYtdlp}
+          class="size-3.5 accent-violet-600"
+        />
+        <span class="text-xs text-gray-400">
+          Buscar actualizaciones al iniciar la app
+        </span>
+      </label>
     </div>
   </section>
 

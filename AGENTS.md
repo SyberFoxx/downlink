@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.6.1**
+- Versión actual: **0.7.0**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -54,6 +54,7 @@ downlink/
 │   │   ├── lib.rs               # Builder, comandos Tauri, estado, workaround Wayland
 │   │   ├── queue.rs             # Cola de trabajos (estados, concurrencia, pausa, orden)
 │   │   ├── engine.rs            # Resolución de yt-dlp/ffmpeg y su origen (sistema/gestionado/sidecar)
+│   │   ├── updater.rs           # Descarga y auto-update de yt-dlp desde GitHub releases
 │   │   ├── history.rs           # Historial persistido (history.json), dedupe por enlace
 │   │   ├── settings.rs          # Settings persistidos, detección de navegadores, EngineInfo
 │   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
@@ -109,6 +110,8 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
 | `get_settings` / `save_settings` | `settings` | `Settings` |
 | `detect_browsers` | — | `BrowserInfo[]` |
 | `engine_info` | — | `EngineInfo` (yt-dlp, runtime JS, ffmpeg) |
+| `check_ytdlp_update` | — | `UpdateCheck` (`current`, `latest`, `updateAvailable`) |
+| `update_ytdlp` | — | `UpdateCheck` (descarga e instala; progreso por el evento `engine-update`) |
 
 ### La cola (`queue.rs`)
 
@@ -195,6 +198,27 @@ la galería, busca y re-descarga reutilizando las `options` guardadas.
 mostrarlos en Ajustes. Si ffmpeg **no** viene del `PATH`, `common_args` añade
 `--ffmpeg-location <ruta>` (en el `PATH` yt-dlp lo encuentra solo).
 
+### Auto-update de yt-dlp (`updater.rs`)
+
+Descarga la copia gestionada de yt-dlp desde los *releases* oficiales de GitHub
+(`api.github.com/.../releases/latest` → asset de la plataforma) a
+`<app_data>/bin`. Antes de sustituir el binario:
+
+1. **SHA-256** contra el `SHA2-256SUMS` del release (si no se puede leer, se omite).
+2. **Ejecución real**: el binario temporal corre `--ignore-config --version`; si no
+   arranca, se descarta.
+
+Solo entonces se reemplaza con `rename` (atómico). Se lanza:
+
+- **A mano** desde Ajustes → `update_ytdlp` (muestra progreso con el evento `engine-update`).
+- **Automático** al arrancar (`auto_update`), si `Settings.autoUpdateYtdlp` está activo
+  y no hay `DOWNLINK_YTDLP` definida. Nunca es fatal: si falla, la app sigue igual.
+
+Solo se soportan los assets publicados como binario suelto (`yt-dlp_linux`,
+`yt-dlp_linux_aarch64`, `yt-dlp.exe`, `yt-dlp_x86.exe`, `yt-dlp_arm64.exe`,
+`yt-dlp_macos`). `yt-dlp_linux_armv7l` solo existe en `.zip` y **no** se ofrece: la
+app no desempaqueta archivos.
+
 
 ## Convenciones de código
 
@@ -232,7 +256,7 @@ mostrarlos en Ajustes. Si ffmpeg **no** viene del `PATH`, `common_args` añade
 
 `.github/workflows/ci.yml` — dos jobs en push/PR a `main`:
 - **frontend** (ubuntu): `npm ci` → `npm run check` → `npm run build`.
-- **rust** (ubuntu + windows, matriz): `cargo fmt --check` → `cargo clippy -D warnings` → `cargo check`.
+- **rust** (ubuntu + windows, matriz): `cargo fmt --check` → `cargo clippy -D warnings` → `cargo test` → `cargo check`.
 
 Verifica el CI con: `gh run watch <run-id> --exit-status`.
 
@@ -247,7 +271,7 @@ Resumen:
 - **v0.4** ✅ — playlists: detección, listado, selección y encolado.
 - **v0.5** ✅ — historial con galería, búsqueda y re-descarga + persistencia local.
 - **v0.6** ✅ — recorte de clips (`--download-sections`) y subtítulos (descarga e incrustado).
-- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1); pendiente auto-update de yt-dlp, tema claro, sidecars empaquetados, tray e instaladores.
+- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0); pendiente auto-update de ffmpeg, tema claro, sidecars empaquetados, tray e instaladores.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
 ## Al terminar un cambio

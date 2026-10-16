@@ -2,6 +2,7 @@ mod engine;
 mod history;
 mod queue;
 mod settings;
+mod updater;
 mod ytdlp;
 
 use std::sync::Arc;
@@ -150,6 +151,19 @@ async fn engine_info() -> settings::EngineInfo {
     ytdlp::engine_info().await
 }
 
+/// Comprueba si hay una versión más reciente de yt-dlp publicada.
+#[tauri::command]
+async fn check_ytdlp_update() -> Result<updater::UpdateCheck, String> {
+    updater::check().await
+}
+
+/// Descarga e instala la última versión de yt-dlp. El progreso llega por el
+/// evento `engine-update`.
+#[tauri::command]
+async fn update_ytdlp(app: tauri::AppHandle) -> Result<updater::UpdateCheck, String> {
+    updater::update_ytdlp(&app).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -170,6 +184,13 @@ pub fn run() {
                 app.handle().clone(),
                 concurrency,
             ))));
+
+            // Actualiza yt-dlp en segundo plano al arrancar (si está activado).
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                updater::auto_update(&handle).await;
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -187,7 +208,9 @@ pub fn run() {
             get_settings,
             save_settings,
             detect_browsers,
-            engine_info
+            engine_info,
+            check_ytdlp_update,
+            update_ytdlp
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

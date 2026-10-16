@@ -21,6 +21,10 @@ fn default_concurrency() -> u32 {
     DEFAULT_CONCURRENCY
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -30,6 +34,9 @@ pub struct Settings {
     /// Número de descargas simultáneas (1–8).
     #[serde(default = "default_concurrency")]
     pub concurrency: u32,
+    /// Busca y aplica actualizaciones de yt-dlp al arrancar.
+    #[serde(default = "default_true")]
+    pub auto_update_ytdlp: bool,
 }
 
 impl Default for Settings {
@@ -39,6 +46,7 @@ impl Default for Settings {
             cookies_browser: None,
             cookies_file: None,
             concurrency: DEFAULT_CONCURRENCY,
+            auto_update_ytdlp: true,
         }
     }
 }

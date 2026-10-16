@@ -7,6 +7,24 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-15
+
+### Added
+- **Auto-update de yt-dlp**: Downlink descarga su propia copia de yt-dlp desde los *releases* oficiales de GitHub y la mantiene al día, sin depender del `PATH` del sistema
+- **Verificación en dos pasos**: el binario descargado se comprueba contra el `SHA2-256SUMS` del release y se ejecuta (`--version`) antes de sustituir nada; la instalación es atómica
+- **Actualización desde Ajustes**: la sección Motor muestra si hay versión nueva, permite actualizar a mano (con barra de progreso) y refresca la versión/origen al terminar
+- **Comprobación automática al arrancar** (activable en Ajustes, activada por defecto): si hay versión nueva, se descarga en segundo plano sin bloquear la interfaz
+- Nueva opción `autoUpdateYtdlp` en los ajustes persistidos y nuevo comando `update_ytdlp`; el progreso se emite por el evento `engine-update`
+- 8 tests nuevos del actualizador (59 en total)
+- El CI ahora ejecuta `cargo test`
+
+### Changed
+- El motor prefiere la copia gestionada por la app (`<app_data>/bin`) por delante del sidecar y del `PATH`, así que la actualización automática sustituye al `yt-dlp` del sistema sin tocarlo
+
+### Notes
+- Si defines `DOWNLINK_YTDLP`, esa ruta tiene prioridad y la actualización automática se desactiva (útil en desarrollo)
+- Solo se ofrecen los binarios sueltos publicados por yt-dlp; plataformas que solo se publican en `.zip` (p. ej. Linux armv7l) no se actualizan desde aquí
+
 ## [0.6.1] - 2026-10-15
 
 ### Added

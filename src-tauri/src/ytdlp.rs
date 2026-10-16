@@ -685,6 +685,12 @@ pub fn spawn_process(
     Ok((child, stdout, stderr))
 }
 
+/// Versión que reporta el yt-dlp resuelto (`--version`), si se puede ejecutar.
+pub async fn ytdlp_version() -> Option<String> {
+    let (path, _) = engine::ytdlp();
+    version_of(&path, "--version").await
+}
+
 /// Información del motor para mostrarla en Ajustes.
 pub async fn engine_info() -> EngineInfo {
     let ytdlp = engine::resolve("yt-dlp", "DOWNLINK_YTDLP");
