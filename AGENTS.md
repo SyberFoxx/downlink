@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.6.0**
+- Versión actual: **0.6.1**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -53,6 +53,7 @@ downlink/
 │   │   ├── main.rs              # Entry point
 │   │   ├── lib.rs               # Builder, comandos Tauri, estado, workaround Wayland
 │   │   ├── queue.rs             # Cola de trabajos (estados, concurrencia, pausa, orden)
+│   │   ├── engine.rs            # Resolución de yt-dlp/ffmpeg y su origen (sistema/gestionado/sidecar)
 │   │   ├── history.rs           # Historial persistido (history.json), dedupe por enlace
 │   │   ├── settings.rs          # Settings persistidos, detección de navegadores, EngineInfo
 │   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
@@ -181,6 +182,20 @@ la galería, busca y re-descarga reutilizando las `options` guardadas.
 - **Subtítulos**: `subtitles` activa `--write-subs` (+ `--write-auto-subs` si `subtitleAuto`) y `--sub-langs` (por defecto `es`). Con `embedSubtitles` (solo vídeo) usa `--embed-subs`; si no, `--convert-subs srt` para dejar `.srt` al lado. En audio nunca se incrustan.
 - Los campos nuevos llevan `#[serde(default)]` para que el `history.json` antiguo siga cargando.
 
+### Motor (yt-dlp y ffmpeg)
+
+`engine.rs` resuelve la ruta de cada binario y su **origen**, en este orden:
+
+1. Variable de entorno (`DOWNLINK_YTDLP` / `DOWNLINK_FFMPEG`).
+2. Copia **gestionada** por la app en `<app_data>/bin` (base para descargar/auto-actualizar).
+3. **Sidecar** junto al ejecutable (mecanismo `externalBin` de Tauri).
+4. `PATH` del sistema.
+
+`EngineInfo` devuelve `ytdlpSource`/`ytdlpPath` y `ffmpegSource`/`ffmpegPath` para
+mostrarlos en Ajustes. Si ffmpeg **no** viene del `PATH`, `common_args` añade
+`--ffmpeg-location <ruta>` (en el `PATH` yt-dlp lo encuentra solo).
+
+
 ## Convenciones de código
 
 - **Español** en comentarios, docs, textos de UI y mensajes de error. Mensajes claros y accionables (dicen qué hacer, no solo qué falló).
@@ -196,7 +211,7 @@ la galería, busca y re-descarga reutilizando las `options` guardadas.
 - **Wayland + NVIDIA**: `lib.rs` define `WEBKIT_DISABLE_DMABUF_RENDERER=1` al arrancar (Linux). Sin esto, WebKitGTK falla con `Error 71 (Protocol error)`. No lo quites.
 - **YouTube anti-bot**: requiere cookies + runtime JS (node/deno) + solver EJS (`--remote-components ejs:github`, solo en dominios de YouTube). Los errores se traducen a mensajes que apuntan a Ajustes.
 - **ffmpeg**: obligatorio para convertir formatos y aplicar filtros de audio.
-- Variables de entorno útiles (override, sobre todo en tests): `DOWNLINK_YTDLP` (ruta del binario), `DOWNLINK_JS_RUNTIME` (runtime forzado), `WEBKIT_DISABLE_DMABUF_RENDERER`.
+- Variables de entorno útiles (override, sobre todo en tests): `DOWNLINK_YTDLP` y `DOWNLINK_FFMPEG` (rutas de los binarios), `DOWNLINK_JS_RUNTIME` (runtime forzado), `WEBKIT_DISABLE_DMABUF_RENDERER`.
 - **Config y ajustes persistidos**: `settings.json` y `history.json` dentro de `app_config_dir()` (en Linux, `~/.config/<bundle-id>/`).
 - Los archivos se descargan en `download_dir()` con patrón `%(title)s [%(id)s].%(ext)s`.
 - **`dragDropEnabled: false`** en `tauri.conf.json`: con el drop nativo de Tauri activo el
@@ -232,7 +247,7 @@ Resumen:
 - **v0.4** ✅ — playlists: detección, listado, selección y encolado.
 - **v0.5** ✅ — historial con galería, búsqueda y re-descarga + persistencia local.
 - **v0.6** ✅ — recorte de clips (`--download-sections`) y subtítulos (descarga e incrustado).
-- **v0.7** — madurez: tema claro, sidecars (empaquetar yt-dlp/ffmpeg) + auto-update, tray, instaladores.
+- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1); pendiente auto-update de yt-dlp, tema claro, sidecars empaquetados, tray e instaladores.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
 ## Al terminar un cambio

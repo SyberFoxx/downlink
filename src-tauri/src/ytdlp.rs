@@ -5,6 +5,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::process::{Child, ChildStderr, ChildStdout, Command};
 
+use crate::engine;
 use crate::settings::{CookiesMode, EngineInfo, Settings};
 
 const PROGRESS_TEMPLATE: &str = "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s";
@@ -16,8 +17,9 @@ const NORMALIZE_FILTER: &str = "loudnorm=I=-16:TP=-1.5:LRA=11";
 /// autogeneradas que repiten vídeos y pueden ser casi infinitas.
 const RADIO_PLAYLIST_LIMIT: usize = 50;
 
-pub fn ytdlp_bin() -> String {
-    std::env::var("DOWNLINK_YTDLP").unwrap_or_else(|_| "yt-dlp".to_string())
+/// Ruta al ejecutable de yt-dlp (variable de entorno → gestionado → sidecar → PATH).
+pub fn ytdlp_bin() -> PathBuf {
+    engine::ytdlp().0
 }
 
 /// Primer runtime JS soportado por yt-dlp disponible en el sistema.
@@ -28,17 +30,8 @@ pub fn detect_js_runtime() -> Option<String> {
     }
     JS_RUNTIMES
         .into_iter()
-        .find(|runtime| which(runtime).is_some())
+        .find(|runtime| engine::which(runtime).is_some())
         .map(String::from)
-}
-
-/// Ubica un ejecutable en el PATH.
-fn which(bin: &str) -> Option<PathBuf> {
-    std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths)
-            .map(|dir| dir.join(bin))
-            .find(|candidate| candidate.is_file())
-    })
 }
 
 fn is_youtube(url: &str) -> bool {
@@ -80,6 +73,14 @@ fn common_args(settings: &Settings, url: &str) -> Vec<String> {
     if let Some(runtime) = detect_js_runtime() {
         args.push("--js-runtimes".into());
         args.push(runtime);
+    }
+
+    // Si ffmpeg no está en el PATH (copia gestionada o sidecar), se lo indicamos.
+    if let Some((path, source)) = engine::ffmpeg()
+        && source != engine::Source::System
+    {
+        args.push("--ffmpeg-location".into());
+        args.push(path.display().to_string());
     }
 
     // YouTube exige resolver desafíos JS con el script oficial (EJS).
@@ -686,27 +687,41 @@ pub fn spawn_process(
 
 /// Información del motor para mostrarla en Ajustes.
 pub async fn engine_info() -> EngineInfo {
-    let version = Command::new(ytdlp_bin())
-        .arg("--version")
+    let ytdlp = engine::resolve("yt-dlp", "DOWNLINK_YTDLP");
+    let ytdlp_version = match ytdlp.as_ref() {
+        Some((path, _)) => version_of(path, "--version").await,
+        None => None,
+    };
+
+    let ffmpeg = engine::ffmpeg();
+    let ffmpeg_version = match ffmpeg.as_ref() {
+        Some((path, _)) => ffmpeg_version(path).await,
+        None => None,
+    };
+
+    EngineInfo {
+        ytdlp_version,
+        ytdlp_source: ytdlp.as_ref().map(|(_, source)| source.label().to_string()),
+        ytdlp_path: ytdlp.as_ref().map(|(path, _)| path.display().to_string()),
+        js_runtime: detect_js_runtime(),
+        ffmpeg_path: ffmpeg.as_ref().map(|(path, _)| path.display().to_string()),
+        ffmpeg_version,
+        ffmpeg_source: ffmpeg
+            .as_ref()
+            .map(|(_, source)| source.label().to_string()),
+    }
+}
+
+/// Ejecuta un binario con un argumento de versión y devuelve su salida limpia.
+async fn version_of(path: &Path, arg: &str) -> Option<String> {
+    Command::new(path)
+        .arg(arg)
         .stdin(Stdio::null())
         .output()
         .await
         .ok()
         .filter(|out| out.status.success())
-        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string());
-
-    let ffmpeg_path = which("ffmpeg");
-    let ffmpeg_version = match ffmpeg_path.as_deref() {
-        Some(path) => ffmpeg_version(path).await,
-        None => None,
-    };
-
-    EngineInfo {
-        ytdlp_version: version,
-        js_runtime: detect_js_runtime(),
-        ffmpeg_path: ffmpeg_path.map(|p| p.display().to_string()),
-        ffmpeg_version,
-    }
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 async fn ffmpeg_version(path: &Path) -> Option<String> {

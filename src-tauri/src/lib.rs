@@ -1,3 +1,4 @@
+mod engine;
 mod history;
 mod queue;
 mod settings;
@@ -158,6 +159,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            engine::init(app.handle());
             let settings = settings::load(app.handle());
             let concurrency = settings.concurrency as usize;
             app.manage(SettingsState(tokio::sync::Mutex::new(settings)));

@@ -83,9 +83,12 @@ pub fn detect_browsers() -> Vec<BrowserInfo> {
 #[serde(rename_all = "camelCase")]
 pub struct EngineInfo {
     pub ytdlp_version: Option<String>,
+    pub ytdlp_source: Option<String>,
+    pub ytdlp_path: Option<String>,
     pub js_runtime: Option<String>,
     pub ffmpeg_path: Option<String>,
     pub ffmpeg_version: Option<String>,
+    pub ffmpeg_source: Option<String>,
 }
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {

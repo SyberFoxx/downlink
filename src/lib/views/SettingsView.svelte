@@ -200,8 +200,18 @@
     >
       <div class="flex items-center justify-between py-0.5">
         <span class="text-gray-500">yt-dlp</span>
-        <span class="font-mono text-xs text-gray-300">
-          {engine?.ytdlpVersion ?? "no encontrado"}
+        <span class="flex items-center gap-2">
+          <span class="font-mono text-xs text-gray-300">
+            {engine?.ytdlpVersion ?? "no encontrado"}
+          </span>
+          {#if engine?.ytdlpSource}
+            <span
+              class="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-400"
+              title={engine.ytdlpPath ?? undefined}
+            >
+              {engine.ytdlpSource}
+            </span>
+          {/if}
         </span>
       </div>
       <div class="flex items-center justify-between py-0.5">
@@ -219,8 +229,18 @@
       <div class="flex items-center justify-between py-0.5">
         <span class="text-gray-500">ffmpeg (conversión y audio)</span>
         {#if engine?.ffmpegVersion}
-          <span class="font-mono text-xs text-emerald-400">
-            {engine.ffmpegVersion} ✓
+          <span class="flex items-center gap-2">
+            <span class="font-mono text-xs text-emerald-400">
+              {engine.ffmpegVersion} ✓
+            </span>
+            {#if engine.ffmpegSource}
+              <span
+                class="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-400"
+                title={engine.ffmpegPath ?? undefined}
+              >
+                {engine.ffmpegSource}
+              </span>
+            {/if}
           </span>
         {:else}
           <span class="text-xs text-amber-400">

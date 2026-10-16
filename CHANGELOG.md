@@ -7,6 +7,14 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-15
+
+### Added
+- **Detección del origen del motor**: Ajustes ahora indica de dónde sale cada binario (sistema, gestionado por Downlink, incluido con la app o variable de entorno), con su ruta
+- **Soporte de sidecars**: el motor busca yt-dlp/ffmpeg también en la carpeta gestionada de la app (`app_data/bin`) y junto al ejecutable, antes de caer al `PATH`
+- Si ffmpeg no está en el `PATH` (copia gestionada o sidecar), se pasa `--ffmpeg-location` a yt-dlp automáticamente
+- Nuevo módulo `engine.rs` con la resolución de binarios y su origen (4 tests nuevos, 51 en total)
+
 ## [0.6.0] - 2026-10-15
 
 ### Added

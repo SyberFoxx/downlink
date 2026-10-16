@@ -103,7 +103,10 @@ export interface BrowserInfo {
 
 export interface EngineInfo {
   ytdlpVersion: string | null;
+  ytdlpSource: string | null;
+  ytdlpPath: string | null;
   jsRuntime: string | null;
   ffmpegPath: string | null;
   ffmpegVersion: string | null;
+  ffmpegSource: string | null;
 }

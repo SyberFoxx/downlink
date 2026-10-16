@@ -64,6 +64,7 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 - 🧩 **Incrustados o como archivo** — embébelos en el vídeo (MP4/MKV) o déjalos como `.srt` sueltos
 
 ### Motor y compatibilidad
+- 🧩 **Detección del motor** — muestra de dónde sale cada binario (sistema, gestionado por Downlink o incluido con la app)
 - 🍪 **Cookies del navegador** — usa tu sesión de Brave/Firefox/Chrome para YouTube y contenido restringido
 - 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
 - 🔧 **Estado del motor** — yt-dlp, runtime JS y ffmpeg detectados y probados desde Ajustes
@@ -184,8 +185,9 @@ downlink/
 - [x] Subtítulos (descarga e incrustado)
 
 ### v0.7 — Madurez
+- [x] Detección del origen del motor (sidecar / gestionado / sistema)
+- [ ] Descarga y auto-update de yt-dlp/ffmpeg
 - [ ] Tema claro
-- [ ] Empaquetado de yt-dlp/ffmpeg como sidecars + auto-update
 - [ ] System tray con progreso + notificaciones
 - [ ] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS)
 
