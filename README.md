@@ -1,6 +1,8 @@
 <div align="center">
 
-# ⬇️ Downlink
+<img src="static/brand/icon.svg" alt="Logotipo de Downlink" width="84" height="84" />
+
+# Downlink
 
 **Descargador de videos y audio multiplataforma con interfaz moderna**
 
@@ -17,7 +19,7 @@
 
 Downlink es una aplicación de escritorio (y próximamente Android) para descargar videos y audio de **+1800 sitios web** — YouTube, TikTok, Instagram, X/Twitter, Twitch, Reddit y muchos más — con una interfaz limpia, rápida y pensada para el usuario final.
 
-Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *sidecars*, lo que significa soporte de sitios siempre actualizado sin sacrificar una experiencia de usuario nativa.
+Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como procesos externos —del sistema, o copias que Downlink descarga y mantiene al día—, lo que significa soporte de sitios siempre actualizado sin sacrificar una experiencia de usuario nativa.
 
 ### ¿Por qué Downlink y no otra cosa?
 
@@ -83,9 +85,9 @@ En el [roadmap](#roadmap): empaquetado de yt-dlp/ffmpeg, system tray e instalado
 
 - **[Tauri 2](https://tauri.app)** — shell nativo, binario ~5 MB, multiplataforma (Linux, Windows, 🚧 macOS, 🚧 Android)
 - **[Svelte 5](https://svelte.dev)** + **[SvelteKit](https://kit.svelte.dev)** — UI reactiva, sin Virtual DOM, arranque <1s
-- **[Rust](https://www.rust-lang.org)** — backend: gestión de cola, procesos sidecar, eventos en tiempo real
-- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — motor de descarga (sidecar)
-- **[ffmpeg](https://ffmpeg.org)** — conversión, remux, incrustación de metadatos (sidecar)
+- **[Rust](https://www.rust-lang.org)** — backend: gestión de cola, procesos externos, eventos en tiempo real
+- **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — motor de descarga (binario gestionado por la app o del sistema)
+- **[ffmpeg](https://ffmpeg.org)** — conversión, remux, incrustación de metadatos (igual que yt-dlp)
 
 ## Requisitos
 

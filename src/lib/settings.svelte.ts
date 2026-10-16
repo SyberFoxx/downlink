@@ -1,4 +1,6 @@
 import { getSettings, saveSettings } from "./api";
+import { toast } from "./toast.svelte";
+import { extractError } from "./utils";
 import type { Settings } from "./types";
 
 /** Ajustes por defecto; también sirven de reserva si el backend no responde. */
@@ -47,8 +49,17 @@ export const settings = {
     })();
     return inflight;
   },
-  /** Persiste el estado actual. */
-  async save(): Promise<void> {
-    await saveSettings($state.snapshot(value) as Settings);
+  /**
+   * Persiste el estado actual. Devuelve `false` si falla (y avisa con un
+   * toast): así ningún llamante puede quedarse creyendo que guardó.
+   */
+  async save(): Promise<boolean> {
+    try {
+      await saveSettings($state.snapshot(value) as Settings);
+      return true;
+    } catch (e) {
+      toast.error(`No se pudieron guardar los ajustes. ${extractError(e)}`);
+      return false;
+    }
   },
 };

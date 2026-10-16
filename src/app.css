@@ -68,6 +68,33 @@ body {
   background-color: color-mix(in oklab, var(--accent) 35%, transparent);
 }
 
+/* Anillo de foco para quien navega con teclado. Los campos de formulario ya
+   cambian su borde de acento al enfocarse, así que el anillo se reserva a
+   botones y enlaces para no duplicar la señal. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+/* Quien pide reducir el movimiento en su sistema no debería ver giros,
+   pulsos ni transiciones largas. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Imagen de fondo: capa fija por detrás del contenido, con un velo del color
    del lienzo para controlar cuánto se ve (--wallpaper-dim). La imagen en sí se
    pone como estilo en línea desde +page.svelte. */

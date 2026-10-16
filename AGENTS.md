@@ -20,7 +20,7 @@ App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una U
 | Backend | Rust (edition 2024, tokio, serde) |
 | Motor | yt-dlp + ffmpeg (del sistema o copia gestionada descargada por la app) |
 
-Estado de navegación: **no hay rutas de SvelteKit en uso**. La app cambia de vista con un estado `view` en `src/routes/+page.svelte` (`"descargas" | "historial" | "ajustes"`). No agregues rutas nuevas sin discutirlo.
+Estado de navegación: **no hay rutas de SvelteKit en uso**. La app cambia de vista con un estado `view` en `src/routes/+page.svelte` (`"descargas" | "historial" | "apariencia" | "ajustes"`). No agregues rutas nuevas sin discutirlo.
 
 ## Estructura
 
@@ -39,19 +39,26 @@ downlink/
 │   │   ├── themes.ts            # Catálogo de temas, tokens y derivación desde pywal/wallust
 │   │   ├── theme.svelte.ts      # Estado reactivo del tema + aplicación al DOM
 │   │   ├── settings.svelte.ts   # Estado reactivo compartido de los ajustes
+│   │   ├── downloads.svelte.ts  # Estado compartido de Descargas (probe, opciones, cola) + pegado global
+│   │   ├── toast.svelte.ts      # Pila de avisos globales (errores/éxitos)
 │   │   ├── components/
-│   │   │   ├── Sidebar.svelte       # Navegación + versión en el pie
+│   │   │   ├── Logo.svelte          # Marca en SVG para la interfaz (colores fijos)
+│   │   │   ├── Sidebar.svelte       # Navegación (iconos) + versión en el pie
 │   │   │   ├── PreviewCard.svelte   # Metadatos del probe
 │   │   │   ├── OptionsPanel.svelte  # Pestañas Video/Audio, presets, volumen
 │   │   │   ├── PlaylistPanel.svelte # Selección de vídeos de una playlist
 │   │   │   ├── QueueList.svelte     # Sección de cola + drag & drop entre pendientes
-│   │   │   └── DownloadRow.svelte   # Fila de un trabajo (estados y acciones)
+│   │   │   ├── DownloadRow.svelte   # Fila de un trabajo (estados y acciones)
+│   │   │   └── Toasts.svelte        # Render de los avisos globales
 │   │   └── views/
 │   │       ├── DownloadsView.svelte # URL, probe, opciones, cola, pegado/arrastre
 │   │       ├── HistoryView.svelte   # Galería del historial, búsqueda, re-descarga
 │   │       ├── AppearanceView.svelte# Tema, acento, imagen de fondo, paleta del escritorio
 │   │       └── SettingsView.svelte  # Cookies, concurrencia, motor, probar conexión
 │   └── app.css                  # Tailwind, tokens de diseño y capa de fondo
+├── static/
+│   ├── brand/icon.svg           # Marca: fuente única de iconos y favicon
+│   └── favicon.png              # Derivado de brand/icon.svg (256×256)
 ├── src-tauri/
 │   ├── src/
 │   │   ├── main.rs              # Entry point
@@ -107,6 +114,7 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
 | `probe_url` | `url` | `ProbeInfo` (`kind`: `video`/`playlist`, `heights`, `entries`, `truncated`) |
 | `start_download` | `url`, `title`, `thumbnail`, `options` | `job_id: u64` (añade a la cola) |
 | `pause_download` / `resume_download` / `cancel_download` | `id` | — |
+| `retry_download` | `id` | — (reencola un trabajo fallido/cancelado con sus opciones) |
 | `reorder_queue` | `ids: Vec<u64>` | — (reordena los pendientes) |
 | `clear_finished` | — | — (quita los terminados) |
 | `get_queue` | — | `Vec<JobView>` |
@@ -133,6 +141,11 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
   que **no** se empieza de cero (no pasar `--continue` a mano).
 - **Orden**: el orden del vector `jobs` es el orden de despacho de los pendientes.
   `reorder_queue` lo cambia; la UI solo reordena los que están `queued`.
+- **Reintentar** (`retry_download`): reencola un trabajo `error` o `cancelled`
+  conservando sus opciones. Si su proceso aún está vivo (pausa/cancelación
+  reciente) no hace nada, para no pisar el `finish` en curso.
+- **Quitar**: `cancel_download` marca `cancelled` los trabajos vivos y **quita de
+  la lista** los que ya terminaron (`done`/`error`/`cancelled` sin proceso activo).
 
 ### Evento de cola
 
@@ -153,6 +166,27 @@ Protocolo de línea sobre stdout de yt-dlp (en `ytdlp.rs` → `parse_line`):
   porcentaje y el ETA se calculan en Rust: `progress.percent` de yt-dlp da `NA`)
 - `__FILE__<ruta>` → ruta final del archivo
 - líneas `[ExtractAudio]`, `[Merger]`, `[Metadata]`… → estado «procesando»
+
+### Estado y avisos en el frontend
+
+- El estado de Descargas (enlace, `probe`, opciones, selección de la playlist y
+  cola) vive en `downloads.svelte.ts` para que **no se pierda al cambiar de
+  vista**. La cola se suscribe una sola vez desde `+page.svelte` (raíz).
+- El **pegado y el arrastre de enlaces son globales** (también en `+page.svelte`):
+  desde otra vista la app salta a Descargas y analiza el enlace. Los campos de
+  texto se ignoran; el arrastre interno de la cola lleva el tipo MIME
+  `application/x-downlink-queue` (`QUEUE_DRAG_TYPE`) para no confundirse con un
+  enlace soltado.
+- `toast.svelte.ts` + `Toasts.svelte` son los avisos emergentes: los fallos sin
+  sitio natural en la UI (p. ej. `settings.save()`, que devuelve `false`) se
+  muestran ahí en vez de perderse en silencio.
+- **Transiciones y skeletons**: el switch de vistas va dentro de un `{#key view}`
+  con `in:fly` (se salta si el sistema pide reducir movimiento). Al cambiar de
+  vista el contenedor con scroll vuelve arriba. `downloads.queueLoaded` distingue
+  «aún no sé si hay cola» de «cola vacía», para que `QueueList` muestre filas
+  fantasma y no un parpadeo de estado vacío; `HistoryView` hace lo propio con su
+  rejilla de tarjetas mientras carga. En `app.css` hay una regla global
+  `@media (prefers-reduced-motion: reduce)` que apaga animaciones y transiciones.
 
 ### Playlists
 
@@ -291,11 +325,44 @@ La interfaz **no usa colores de Tailwind directamente**: usa *tokens* semántico
   que guardar en Ajustes no pise lo de Apariencia ni al revés.
 
 
+### Marca e iconos (`static/brand/icon.svg`, `Logo.svelte`)
+
+La marca es una **flecha descendente entrando en una bandeja** sobre un cuadrado
+con degradado **violeta→índigo** (`#8b5cf6` → `#7c3aed` → `#4338ca`).
+
+- `static/brand/icon.svg` es la **fuente única**: de ahí salen el icono de la app,
+  el favicon (`static/favicon.png`, 256×256) y el logotipo del README.
+- `Logo.svelte` es la marca en SVG **en línea** para la interfaz (la sidebar). Sus
+  colores son **fijos a propósito**: son identidad de marca, no siguen al tema
+  elegido (como el verde de Spotify).
+- **Regenerar los iconos** (al tocar la marca, desde la raíz del repo):
+
+  ```bash
+  inkscape static/brand/icon.svg --export-type=png \
+    --export-filename=/tmp/downlink-icon.png --export-width=1024 --export-height=1024
+  npx tauri icon /tmp/downlink-icon.png   # reescribe src-tauri/icons/*
+  inkscape static/brand/icon.svg --export-type=png \
+    --export-filename=static/favicon.png --export-width=256 --export-height=256
+  ```
+
+  `npx tauri icon` también genera los juegos de iOS/Android en
+  `src-tauri/icons/{ios,android}/` (se usan en la v1.0 móvil).
+- Los iconos de la navegación son **Heroicons 24 outline** (paths en línea en
+  `Sidebar.svelte`, `stroke-width` 1.75). Mantén ese estilo si añades vistas.
+- `tauri.conf.json`: `productName` es `Downlink` (nombra bundles, instaladores y
+  la entrada `Name` del `.desktop`; el binario sigue saliendo de Cargo, `downlink`).
+  El bundle lleva metadatos (`publisher`, `copyright`, `category`, `license`,
+  `licenseFile`, `homepage`, `shortDescription`, `longDescription`). El
+  `identifier` **no** se toca sin migrar datos: de él cuelga `app_config_dir()`.
+
 ## Convenciones de código
 
 - **Español** en comentarios, docs, textos de UI y mensajes de error. Mensajes claros y accionables (dicen qué hacer, no solo qué falló).
 - **Nada de `unwrap()`** en rutas que manejen entrada del usuario: usa `Result` + mensajes.
 - Rust: `cargo fmt` y `clippy -D warnings` deben estar limpios. Tests unitarios junto al código (`#[cfg(test)] mod tests`).
+- Ninguna promesa se queda sin gestionar: si una acción puede fallar (guardar
+  ajustes, un comando Tauri…), se captura y se avisa (toast o mensaje en
+  contexto). **Nada de errores silenciosos.**
 - Frontend: Svelte 5 con **runes** (`$state`, `$derived`, `$props`, `$bindable`, `$state.snapshot`). No uses stores ni sintaxis de Svelte 4.
 - Al enviar opciones al backend desde estado reactivo usa `$state.snapshot(options)` (los proxies no serializan bien).
 - Commits: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`).

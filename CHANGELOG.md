@@ -7,6 +7,29 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+- **Reintentar**: los trabajos fallidos o cancelados tienen botón «Reintentar», que los reencola con las mismas opciones (nuevo comando `retry_download`)
+- **Avisos emergentes (toasts)** en la esquina inferior derecha: los fallos que antes pasaban en silencio (sobre todo al guardar ajustes) ahora se ven
+- **Pegar o arrastrar enlaces desde cualquier vista**: estando en Historial o Ajustes, un enlace pegado o soltado salta a Descargas y se analiza al momento
+- Anillo de foco visible al navegar con teclado, `aria-current` en la barra lateral y etiquetas accesibles en los campos de búsqueda y enlace
+- **Marca propia**: logotipo de Downlink (flecha descendente sobre una bandeja, con degradado violeta→índigo) en la barra lateral, favicon e **iconos de la aplicación** para Linux, Windows y macOS — ya no son los de ejemplo de Tauri
+- **Iconos en la navegación**: cada vista de la barra lateral tiene el suyo
+- **Transiciones entre vistas** (un desvanecido breve) y **esqueletos de carga** en la cola y en el historial, que sustituyen al parpadeo del estado vacío mientras se le pregunta al backend
+- Metadatos del paquete y nombre visible de la aplicación: «Downlink» en instaladores, menús y la entrada `.desktop`, con descripción, categoría, editor, licencia y web
+
+### Changed
+- Las animaciones, transiciones y giros se desactivan si el sistema pide **reducir el movimiento**
+- Al cambiar de vista, el contenido vuelve arriba en lugar de heredar la posición de scroll de la vista anterior
+- El README ya no dice que yt-dlp y ffmpeg van «como sidecars»: se invocan como procesos externos (del sistema o copias que gestiona la app)
+
+### Fixed
+- El estado de Descargas (enlace analizado, selección de la playlist y opciones) ya no se pierde al cambiar de vista y volver
+- Ajustes ya no se queda con «Guardar» y «Probar conexión» deshabilitados si falla la lectura del equipo al abrir la vista
+- Guardar ajustes o apariencia sin backend ya no genera errores sin gestionar: se avisa con un toast
+- Las cajas de error se pueden cerrar y los botones de solo icono de la cola tienen nombre accesible
+- La ✕ de un trabajo ya terminado (error o cancelado) ahora lo quita de la lista en vez de no hacer nada
+- El resaltado de «suelta para añadir» ya no aparece al reordenar la cola arrastrando
+
 ## [0.8.0] - 2026-10-15
 
 ### Added

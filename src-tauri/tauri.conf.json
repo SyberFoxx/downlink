@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "downlink",
+  "productName": "Downlink",
   "version": "0.8.0",
   "identifier": "com.ramses.downlink",
   "build": {
@@ -28,6 +28,14 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Ramses Sotomayor",
+    "copyright": "© 2026 Ramses Sotomayor",
+    "category": "Utility",
+    "license": "MIT",
+    "licenseFile": "../LICENSE",
+    "homepage": "https://github.com/SyberFoxx/downlink",
+    "shortDescription": "Descarga vídeo y audio de más de 1800 sitios",
+    "longDescription": "Downlink descarga vídeo y audio de YouTube, TikTok, Instagram y más de 1800 sitios web con una interfaz moderna: elige formato y calidad, recorta clips, añade subtítulos, normaliza el volumen y re-descarga desde el historial.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

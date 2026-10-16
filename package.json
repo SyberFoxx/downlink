@@ -1,7 +1,8 @@
 {
   "name": "downlink",
   "version": "0.8.0",
-  "description": "",
+  "description": "Descarga vídeo y audio de más de 1800 sitios con una interfaz moderna",
+  "author": "Ramses Sotomayor",
   "type": "module",
   "scripts": {
     "dev": "vite dev",

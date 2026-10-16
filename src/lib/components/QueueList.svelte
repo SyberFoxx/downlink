@@ -1,19 +1,32 @@
 <script lang="ts">
   import type { QueueJob } from "$lib/types";
   import DownloadRow from "$lib/components/DownloadRow.svelte";
+  import { QUEUE_DRAG_TYPE } from "$lib/downloads.svelte";
 
   interface Props {
     jobs: QueueJob[];
+    /** El backend aún no ha enviado la primera foto de la cola. */
+    loading?: boolean;
     onPause: (id: number) => void;
     onResume: (id: number) => void;
     onCancel: (id: number) => void;
+    onRetry: (id: number) => void;
     onReveal: (job: QueueJob) => void;
     onReorder: (ids: number[]) => void;
     onClearFinished: () => void;
   }
 
-  let { jobs, onPause, onResume, onCancel, onReveal, onReorder, onClearFinished }: Props =
-    $props();
+  let {
+    jobs,
+    loading = false,
+    onPause,
+    onResume,
+    onCancel,
+    onRetry,
+    onReveal,
+    onReorder,
+    onClearFinished,
+  }: Props = $props();
 
   let dragId = $state<number | null>(null);
 
@@ -28,6 +41,9 @@
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", String(id));
+      // Marca interna: el arrastre global de enlaces la excluye para no
+      // confundir un reordenamiento con un enlace soltado.
+      e.dataTransfer.setData(QUEUE_DRAG_TYPE, String(id));
     }
   }
 
@@ -83,7 +99,24 @@
     {/if}
   </div>
 
-  {#if jobs.length === 0}
+  {#if loading}
+    <div class="space-y-2" aria-hidden="true">
+      {#each [0, 1] as i (i)}
+        <div class="rounded-xl border border-line bg-surface/40 px-4 py-3">
+          <div class="flex items-center gap-3">
+            <div class="size-6 shrink-0 animate-pulse rounded-full bg-elevated"></div>
+            <div class="min-w-0 flex-1 space-y-1.5">
+              <div class="h-3.5 w-1/2 animate-pulse rounded bg-elevated"></div>
+              <div class="h-2.5 w-1/3 animate-pulse rounded bg-elevated"></div>
+            </div>
+            <div class="flex w-44 shrink-0 justify-end">
+              <div class="size-6 animate-pulse rounded-md bg-elevated"></div>
+            </div>
+          </div>
+        </div>
+      {/each}
+    </div>
+  {:else if jobs.length === 0}
     <div class="rounded-xl border border-dashed border-line px-6 py-10 text-center">
       <p class="text-sm text-ink-muted">Todavía no hay nada en la cola</p>
       <p class="mt-1 text-xs text-ink-faint">
@@ -100,6 +133,7 @@
           {onPause}
           {onResume}
           {onCancel}
+          {onRetry}
           {onReveal}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}

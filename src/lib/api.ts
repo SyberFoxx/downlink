@@ -39,6 +39,11 @@ export function cancelDownload(jobId: number): Promise<void> {
   return invoke<void>("cancel_download", { id: jobId });
 }
 
+/** Reintenta un trabajo fallido o cancelado, conservando sus opciones. */
+export function retryDownload(jobId: number): Promise<void> {
+  return invoke<void>("retry_download", { id: jobId });
+}
+
 export function reorderQueue(ids: number[]): Promise<void> {
   return invoke<void>("reorder_queue", { ids });
 }

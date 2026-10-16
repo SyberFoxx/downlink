@@ -12,6 +12,8 @@
   } from "$lib/api";
   import EngineUpdateRow from "$lib/components/EngineUpdateRow.svelte";
   import { settings } from "$lib/settings.svelte";
+  import { toast } from "$lib/toast.svelte";
+  import { extractError } from "$lib/utils";
   import type { BrowserInfo, CookiesMode, EngineInfo } from "$lib/types";
 
   const TEST_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
@@ -44,17 +46,26 @@
   ];
 
   onMount(async () => {
-    const [detected, info] = await Promise.all([
-      detectBrowsers(),
-      engineInfo(),
-    ]);
-    browsers = detected;
-    engine = info;
+    // Carga tolerante: si algo falla, los botones se habilitan igualmente y
+    // el usuario ve el aviso (antes la vista se quedaba cargando para siempre).
     await settings.load();
-    if (!settings.value.cookiesBrowser && detected.length > 0) {
-      settings.value.cookiesBrowser = detected[0].id;
+    try {
+      const [detected, info] = await Promise.all([
+        detectBrowsers(),
+        engineInfo(),
+      ]);
+      browsers = detected;
+      engine = info;
+      if (!settings.value.cookiesBrowser && detected.length > 0) {
+        settings.value.cookiesBrowser = detected[0].id;
+      }
+    } catch (e) {
+      toast.error(
+        `No se pudo leer el estado de este equipo. ${extractError(e)}`,
+      );
+    } finally {
+      loaded = true;
     }
-    loaded = true;
   });
 
   async function refreshEngine() {
@@ -68,18 +79,22 @@
   async function save() {
     saving = true;
     saved = false;
-    try {
-      await settings.save();
+    // `settings.save()` ya avisa con toast si falla; solo celebramos si fue bien.
+    const ok = await settings.save();
+    if (ok) {
       saved = true;
       setTimeout(() => (saved = false), 2500);
-    } finally {
-      saving = false;
     }
+    saving = false;
   }
 
   async function chooseFile() {
-    const file = await pickCookiesFile();
-    if (file) settings.value.cookiesFile = file;
+    try {
+      const file = await pickCookiesFile();
+      if (file) settings.value.cookiesFile = file;
+    } catch (e) {
+      toast.error(`No se pudo abrir el selector de archivos. ${extractError(e)}`);
+    }
   }
 
   async function testConnection() {
@@ -321,6 +336,7 @@
       {#if testResult}
         <p
           class="text-xs {testResult.ok ? 'text-ok' : 'text-danger'}"
+          role="status"
         >
           {testResult.ok ? "✅" : "❌"}
           {testResult.message}

@@ -80,6 +80,14 @@ async fn cancel_download(app: tauri::AppHandle, id: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// Reintenta un trabajo fallido o cancelado, conservando sus opciones.
+#[tauri::command]
+async fn retry_download(app: tauri::AppHandle, id: u64) -> Result<(), String> {
+    let settings = app.state::<SettingsState>().0.lock().await.clone();
+    app.state::<QueueState>().0.retry(&settings, id).await;
+    Ok(())
+}
+
 /// Reordena los trabajos pendientes de la cola.
 #[tauri::command]
 async fn reorder_queue(app: tauri::AppHandle, ids: Vec<u64>) -> Result<(), String> {
@@ -225,6 +233,7 @@ pub fn run() {
             pause_download,
             resume_download,
             cancel_download,
+            retry_download,
             reorder_queue,
             clear_finished,
             get_queue,

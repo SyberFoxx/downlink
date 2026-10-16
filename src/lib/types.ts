@@ -89,6 +89,9 @@ export interface HistoryEntry {
 
 export type CookiesMode = "none" | "browser" | "file";
 
+/** Vistas principales de la app (las que muestra la barra lateral). */
+export type AppView = "descargas" | "historial" | "apariencia" | "ajustes";
+
 /** Preferencias de apariencia. */
 export interface ThemeSettings {
   /** Id de un tema del catálogo, o "system" para seguir al escritorio. */

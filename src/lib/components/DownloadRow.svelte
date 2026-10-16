@@ -11,6 +11,7 @@
     onPause: (id: number) => void;
     onResume: (id: number) => void;
     onCancel: (id: number) => void;
+    onRetry: (id: number) => void;
     onReveal: (job: QueueJob) => void;
     onDragStart: (id: number, e: DragEvent) => void;
     onDragOver: (id: number, e: DragEvent) => void;
@@ -25,6 +26,7 @@
     onPause,
     onResume,
     onCancel,
+    onRetry,
     onReveal,
     onDragStart,
     onDragOver,
@@ -167,6 +169,7 @@
         <button
           class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
           title="Pausar"
+          aria-label="Pausar descarga"
           onclick={() => onPause(job.id)}
         >
           <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -179,6 +182,7 @@
         <button
           class="rounded-md p-1 text-ok transition-colors hover:bg-elevated"
           title="Reanudar"
+          aria-label="Reanudar descarga"
           onclick={() => onResume(job.id)}
         >
           <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -191,6 +195,7 @@
         <button
           class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
           title="Mostrar en la carpeta"
+          aria-label="Mostrar el archivo en la carpeta"
           onclick={() => onReveal(job)}
         >
           <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
@@ -199,10 +204,30 @@
         </button>
       {/if}
 
+      {#if status === "error" || status === "cancelled"}
+        <button
+          class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-accent"
+          title="Reintentar"
+          aria-label="Reintentar descarga"
+          onclick={() => onRetry(job.id)}
+        >
+          <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+        </button>
+      {/if}
+
       {#if status !== "done"}
         <button
           class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink-strong"
-          title={status === "queued" || status === "paused" ? "Quitar de la cola" : "Cancelar"}
+          title={status === "error" || status === "cancelled"
+            ? "Quitar de la lista"
+            : status === "queued" || status === "paused"
+              ? "Quitar de la cola"
+              : "Cancelar"}
+          aria-label={status === "error" || status === "cancelled"
+            ? "Quitar de la lista"
+            : "Cancelar descarga"}
           onclick={() => onCancel(job.id)}
         >
           <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

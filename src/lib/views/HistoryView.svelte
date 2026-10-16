@@ -9,7 +9,7 @@
   } from "$lib/api";
   import { summarizeOptions } from "$lib/options";
   import type { HistoryEntry } from "$lib/types";
-  import { formatBytes, formatDate } from "$lib/utils";
+  import { extractError, formatBytes, formatDate } from "$lib/utils";
 
   interface Props {
     onGoToDownloads: () => void;
@@ -46,12 +46,6 @@
         entry.url.toLowerCase().includes(q),
     );
   });
-
-  function extractError(e: unknown): string {
-    if (typeof e === "string") return e;
-    if (e instanceof Error) return e.message;
-    return "Error inesperado";
-  }
 
   async function reveal(entry: HistoryEntry) {
     if (!entry.filePath) return;
@@ -147,6 +141,7 @@
       </svg>
       <input
         type="text"
+        aria-label="Buscar en el historial"
         bind:value={query}
         placeholder="Buscar por título o enlace…"
         class="w-full rounded-lg border border-line bg-surface/50 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-accent"
@@ -157,13 +152,36 @@
   {#if errorMessage}
     <div
       class="mb-6 rounded-lg border border-danger-bg/50 bg-danger-bg/30 px-4 py-3 text-sm text-danger"
+      role="alert"
     >
-      <p class="whitespace-pre-line">{errorMessage}</p>
+      <div class="flex items-start justify-between gap-3">
+        <p class="whitespace-pre-line">{errorMessage}</p>
+        <button
+          class="-mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-danger/70 transition-colors hover:bg-danger-bg/40 hover:text-danger"
+          aria-label="Cerrar el aviso de error"
+          onclick={() => (errorMessage = null)}
+        >
+          <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   {/if}
 
   {#if loading}
-    <p class="text-sm text-ink-muted">Cargando historial…</p>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+      {#each [0, 1, 2, 3, 4, 5] as i (i)}
+        <div class="flex flex-col overflow-hidden rounded-xl border border-line bg-surface/40">
+          <div class="aspect-video animate-pulse bg-elevated"></div>
+          <div class="flex flex-1 flex-col p-3">
+            <div class="h-3.5 w-3/4 animate-pulse rounded bg-elevated"></div>
+            <div class="mt-2 h-3 w-1/3 animate-pulse rounded bg-elevated"></div>
+            <div class="mt-4 h-7 w-full animate-pulse rounded-md bg-elevated"></div>
+          </div>
+        </div>
+      {/each}
+    </div>
   {:else if entries.length === 0}
     <div
       class="rounded-xl border border-dashed border-line px-6 py-16 text-center"

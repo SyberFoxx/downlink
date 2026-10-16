@@ -149,6 +149,26 @@ fn apply_pending_order(jobs: &mut Vec<JobView>, order: &[u64]) -> bool {
     changed
 }
 
+/// Reencola un trabajo fallido o cancelado para volver a intentarlo con las
+/// mismas opciones. Devuelve `true` si el trabajo quedó pendiente.
+fn requeue_finished(jobs: &mut [JobView], id: u64) -> bool {
+    let Some(job) = jobs.iter_mut().find(|j| j.id == id) else {
+        return false;
+    };
+    if !matches!(job.status, JobStatus::Error | JobStatus::Cancelled) {
+        return false;
+    }
+    job.status = JobStatus::Queued;
+    job.percent = None;
+    job.downloaded_bytes = None;
+    job.total_bytes = None;
+    job.speed_bps = None;
+    job.eta_secs = None;
+    job.file_path = None;
+    job.message = None;
+    true
+}
+
 impl Queue {
     pub fn new(app: AppHandle, concurrency: usize) -> Self {
         Self {
@@ -229,24 +249,44 @@ impl Queue {
         self.pump(settings.clone()).await;
     }
 
-    /// Cancela un trabajo (en curso o pendiente).
+    /// Cancela un trabajo (en curso o pendiente). Los que ya terminaron se
+    /// quitan de la lista; si su proceso aún está drenando, se espera a que
+    /// termine (su hueco se libera en `finish`).
     pub async fn cancel(&self, id: u64) {
         {
             let mut inner = self.inner.lock().await;
-            let Some(job) = inner.jobs.iter_mut().find(|j| j.id == id) else {
+            let Some(pos) = inner.jobs.iter().position(|j| j.id == id) else {
                 return;
             };
-            if job.status.is_finished() {
-                return;
-            }
-            job.status = JobStatus::Cancelled;
-            job.speed_bps = None;
-            job.eta_secs = None;
-            if let Some(child) = inner.running.get_mut(&id) {
-                let _ = child.start_kill();
+            if inner.jobs[pos].status.is_finished() {
+                if inner.running.contains_key(&id) {
+                    return;
+                }
+                inner.jobs.remove(pos);
+            } else {
+                let job = &mut inner.jobs[pos];
+                job.status = JobStatus::Cancelled;
+                job.speed_bps = None;
+                job.eta_secs = None;
+                if let Some(child) = inner.running.get_mut(&id) {
+                    let _ = child.start_kill();
+                }
             }
         }
         self.emit().await;
+    }
+
+    /// Reintenta un trabajo fallido o cancelado conservando sus opciones.
+    /// Si su proceso todavía está vivo (pausa/cancelación reciente) no hace nada.
+    pub async fn retry(self: &Arc<Self>, settings: &Settings, id: u64) {
+        {
+            let mut inner = self.inner.lock().await;
+            if inner.running.contains_key(&id) {
+                return;
+            }
+            requeue_finished(&mut inner.jobs, id);
+        }
+        self.pump(settings.clone()).await;
     }
 
     /// Reordena los trabajos pendientes según `order`.
@@ -551,6 +591,32 @@ mod tests {
     fn reordenar_sin_cambios_no_reporta_cambio() {
         let mut jobs = vec![job(1, JobStatus::Queued), job(2, JobStatus::Queued)];
         assert!(!apply_pending_order(&mut jobs, &[1, 2]));
+    }
+
+    #[test]
+    fn reencolar_reintenta_fallidos_y_cancelados() {
+        let mut failed = job(1, JobStatus::Error);
+        failed.message = Some("boom".to_string());
+        let cancelled = job(2, JobStatus::Cancelled);
+        let mut done = job(3, JobStatus::Done);
+        done.file_path = Some("/tmp/x.mp4".to_string());
+        let mut jobs = vec![failed, cancelled, done, job(4, JobStatus::Queued)];
+
+        assert!(requeue_finished(&mut jobs, 1));
+        assert_eq!(jobs[0].status, JobStatus::Queued);
+        assert_eq!(jobs[0].message, None);
+
+        assert!(requeue_finished(&mut jobs, 2));
+        assert_eq!(jobs[1].status, JobStatus::Queued);
+
+        // Un trabajo completado no se reintenta ni pierde su ruta.
+        assert!(!requeue_finished(&mut jobs, 3));
+        assert_eq!(jobs[2].status, JobStatus::Done);
+        assert_eq!(jobs[2].file_path.as_deref(), Some("/tmp/x.mp4"));
+
+        // Ids desconocidos o ya pendientes no cambian nada.
+        assert!(!requeue_finished(&mut jobs, 99));
+        assert!(!requeue_finished(&mut jobs, 4));
     }
 
     #[test]

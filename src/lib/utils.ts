@@ -36,6 +36,13 @@ export function formatEta(seconds?: number | null): string {
   return `${s}s`;
 }
 
+/** Referencia accesible para un error; lo normal es que venga como string. */
+export function extractError(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message;
+  return "Error inesperado";
+}
+
 const DATE_FORMAT = new Intl.DateTimeFormat("es", {
   day: "2-digit",
   month: "short",
