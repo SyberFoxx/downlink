@@ -96,6 +96,8 @@ export interface Settings {
   concurrency: number;
   /** Busca y aplica actualizaciones de yt-dlp al arrancar. */
   autoUpdateYtdlp: boolean;
+  /** Descarga ffmpeg al arrancar si no hay ninguno disponible. */
+  autoDownloadFfmpeg: boolean;
 }
 
 export interface BrowserInfo {
@@ -113,7 +115,7 @@ export interface EngineInfo {
   ffmpegSource: string | null;
 }
 
-/** Resultado de comprobar si hay una versión nueva de yt-dlp. */
+/** Resultado de comprobar si hay una versión nueva de un motor. */
 export interface UpdateCheck {
   current: string | null;
   latest: string | null;

@@ -701,7 +701,7 @@ pub async fn engine_info() -> EngineInfo {
 
     let ffmpeg = engine::ffmpeg();
     let ffmpeg_version = match ffmpeg.as_ref() {
-        Some((path, _)) => ffmpeg_version(path).await,
+        Some((path, _)) => ffmpeg_version_of(path).await,
         None => None,
     };
 
@@ -730,7 +730,13 @@ async fn version_of(path: &Path, arg: &str) -> Option<String> {
         .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-async fn ffmpeg_version(path: &Path) -> Option<String> {
+/// Versión del ffmpeg resuelto (`-version`), si está instalado y se puede ejecutar.
+pub async fn ffmpeg_version() -> Option<String> {
+    let (path, _) = engine::ffmpeg()?;
+    ffmpeg_version_of(&path).await
+}
+
+async fn ffmpeg_version_of(path: &Path) -> Option<String> {
     let output = Command::new(path)
         .arg("-version")
         .stdin(Stdio::null())

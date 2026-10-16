@@ -37,6 +37,12 @@ pub struct Settings {
     /// Busca y aplica actualizaciones de yt-dlp al arrancar.
     #[serde(default = "default_true")]
     pub auto_update_ytdlp: bool,
+    /// Descarga ffmpeg al arrancar si no hay ninguno disponible.
+    ///
+    /// No se refresca solo: los builds de ffmpeg pesan ~150 MB y se regeneran a
+    /// diario, así que actualizar una copia existente queda a mano en Ajustes.
+    #[serde(default = "default_true")]
+    pub auto_download_ffmpeg: bool,
 }
 
 impl Default for Settings {
@@ -47,6 +53,7 @@ impl Default for Settings {
             cookies_file: None,
             concurrency: DEFAULT_CONCURRENCY,
             auto_update_ytdlp: true,
+            auto_download_ffmpeg: true,
         }
     }
 }

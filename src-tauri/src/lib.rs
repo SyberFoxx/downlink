@@ -154,7 +154,7 @@ async fn engine_info() -> settings::EngineInfo {
 /// Comprueba si hay una versión más reciente de yt-dlp publicada.
 #[tauri::command]
 async fn check_ytdlp_update() -> Result<updater::UpdateCheck, String> {
-    updater::check().await
+    updater::check_ytdlp().await
 }
 
 /// Descarga e instala la última versión de yt-dlp. El progreso llega por el
@@ -162,6 +162,19 @@ async fn check_ytdlp_update() -> Result<updater::UpdateCheck, String> {
 #[tauri::command]
 async fn update_ytdlp(app: tauri::AppHandle) -> Result<updater::UpdateCheck, String> {
     updater::update_ytdlp(&app).await
+}
+
+/// Comprueba si conviene descargar o actualizar la copia gestionada de ffmpeg.
+#[tauri::command]
+async fn check_ffmpeg_update() -> Result<updater::UpdateCheck, String> {
+    updater::check_ffmpeg().await
+}
+
+/// Descarga e instala ffmpeg (y ffprobe). El progreso llega por el evento
+/// `engine-update`.
+#[tauri::command]
+async fn update_ffmpeg(app: tauri::AppHandle) -> Result<updater::UpdateCheck, String> {
+    updater::update_ffmpeg(&app).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -185,7 +198,7 @@ pub fn run() {
                 concurrency,
             ))));
 
-            // Actualiza yt-dlp en segundo plano al arrancar (si está activado).
+            // Actualiza los motores en segundo plano al arrancar (si está activado).
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 updater::auto_update(&handle).await;
@@ -210,7 +223,9 @@ pub fn run() {
             detect_browsers,
             engine_info,
             check_ytdlp_update,
-            update_ytdlp
+            update_ytdlp,
+            check_ffmpeg_update,
+            update_ffmpeg
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

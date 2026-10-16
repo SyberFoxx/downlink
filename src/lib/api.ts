@@ -92,6 +92,14 @@ export function updateYtdlp(): Promise<UpdateCheck> {
   return invoke<UpdateCheck>("update_ytdlp");
 }
 
+export function checkFfmpegUpdate(): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>("check_ffmpeg_update");
+}
+
+export function updateFfmpeg(): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>("update_ffmpeg");
+}
+
 export function onEngineUpdate(
   callback: (progress: EngineUpdateProgress) => void,
 ): Promise<() => void> {

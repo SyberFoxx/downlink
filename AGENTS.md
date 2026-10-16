@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.7.0**
+- Versión actual: **0.7.1**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -18,7 +18,7 @@ App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una U
 | Frontend | Svelte 5 (runes) + SvelteKit con `adapter-static` |
 | Estilos | Tailwind CSS 4 vía `@tailwindcss/vite` |
 | Backend | Rust (edition 2024, tokio, serde) |
-| Motor | yt-dlp + ffmpeg (binarios del sistema) |
+| Motor | yt-dlp + ffmpeg (del sistema o copia gestionada descargada por la app) |
 
 Estado de navegación: **no hay rutas de SvelteKit en uso**. La app cambia de vista con un estado `view` en `src/routes/+page.svelte` (`"descargas" | "historial" | "ajustes"`). No agregues rutas nuevas sin discutirlo.
 
@@ -54,7 +54,7 @@ downlink/
 │   │   ├── lib.rs               # Builder, comandos Tauri, estado, workaround Wayland
 │   │   ├── queue.rs             # Cola de trabajos (estados, concurrencia, pausa, orden)
 │   │   ├── engine.rs            # Resolución de yt-dlp/ffmpeg y su origen (sistema/gestionado/sidecar)
-│   │   ├── updater.rs           # Descarga y auto-update de yt-dlp desde GitHub releases
+│   │   ├── updater.rs           # Descarga y auto-update de yt-dlp y ffmpeg (GitHub releases)
 │   │   ├── history.rs           # Historial persistido (history.json), dedupe por enlace
 │   │   ├── settings.rs          # Settings persistidos, detección de navegadores, EngineInfo
 │   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
@@ -112,6 +112,8 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
 | `engine_info` | — | `EngineInfo` (yt-dlp, runtime JS, ffmpeg) |
 | `check_ytdlp_update` | — | `UpdateCheck` (`current`, `latest`, `updateAvailable`) |
 | `update_ytdlp` | — | `UpdateCheck` (descarga e instala; progreso por el evento `engine-update`) |
+| `check_ffmpeg_update` | — | `UpdateCheck` (comprueba si falta o está desfasado el ffmpeg gestionado) |
+| `update_ffmpeg` | — | `UpdateCheck` (descarga ffmpeg+ffprobe; progreso por el evento `engine-update`) |
 
 ### La cola (`queue.rs`)
 
@@ -196,7 +198,9 @@ la galería, busca y re-descarga reutilizando las `options` guardadas.
 
 `EngineInfo` devuelve `ytdlpSource`/`ytdlpPath` y `ffmpegSource`/`ffmpegPath` para
 mostrarlos en Ajustes. Si ffmpeg **no** viene del `PATH`, `common_args` añade
-`--ffmpeg-location <ruta>` (en el `PATH` yt-dlp lo encuentra solo).
+`--ffmpeg-location <ruta>` al binario (yt-dlp busca `ffprobe` en su misma carpeta;
+en el `PATH` lo encuentra solo). Por eso la copia gestionada instala `ffmpeg` y
+`ffprobe` **juntos** en `<app_data>/bin`.
 
 ### Auto-update de yt-dlp (`updater.rs`)
 
@@ -216,8 +220,33 @@ Solo entonces se reemplaza con `rename` (atómico). Se lanza:
 
 Solo se soportan los assets publicados como binario suelto (`yt-dlp_linux`,
 `yt-dlp_linux_aarch64`, `yt-dlp.exe`, `yt-dlp_x86.exe`, `yt-dlp_arm64.exe`,
-`yt-dlp_macos`). `yt-dlp_linux_armv7l` solo existe en `.zip` y **no** se ofrece: la
-app no desempaqueta archivos.
+`yt-dlp_macos`). `yt-dlp_linux_armv7l` solo se publica dentro de un `.zip` y **no**
+se ofrece (aunque ffmpeg sí desempaqueta, ver abajo, yt-dlp se limita a los binarios sueltos).
+
+### Descarga de ffmpeg (`updater.rs`)
+
+`ffmpeg` (y `ffprobe`, que se instala a su lado) se descarga de los builds estáticos
+de [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds), tag móvil `latest`,
+solo para **Linux y Windows** (x86_64 y arm64). Se verifica igual que yt-dlp
+(SHA-256 contra `checksums.sha256` + ejecución de `-version`).
+
+- **Desempaquetado en Rust**: `.tar.xz` con `lzma-rs` + `tar`, `.zip` con `zip`
+  (feature `deflate`). **No** se depende de `tar`/`xz`/`unzip` del sistema. La
+  descompresión corre en `spawn_blocking` (cientos de MB) y primero baja a un `.tar`
+  temporal para no cargar todo en memoria.
+- **Cuándo se instala**: `check_ffmpeg` decide con `ffmpeg_update_available`:
+  - sin ffmpeg → hay que descargarlo;
+  - copia **gestionada** → solo si la fecha de compilación remota (`updated_at` del
+    asset) es más nueva que la del build instalado (se extrae de `ffmpeg -version`,
+    p. ej. `N-127564-g3c92f003c7-20261015` → `20261015`);
+  - ffmpeg del **sistema** o por `DOWNLINK_FFMPEG` → se respeta, no se toca.
+- **Automático**: al arrancar solo se descarga **si falta** ffmpeg y
+  `Settings.autoDownloadFfmpeg` está activo. **No** se refresca solo: cada build pesa
+  ~150 MB y se regenera a diario, así que actualizar una copia existente es manual
+  desde Ajustes.
+- Los dos binarios se instalan juntos con `rename` para dejarlos siempre a la par.
+- Test de integración opcional (no corre en CI): `DOWNLINK_FFMPEG_TEST_ARCHIVE=<archivo>
+  cargo test -- --ignored extrae_binarios_reales_de_ffmpeg`.
 
 
 ## Convenciones de código
@@ -271,7 +300,7 @@ Resumen:
 - **v0.4** ✅ — playlists: detección, listado, selección y encolado.
 - **v0.5** ✅ — historial con galería, búsqueda y re-descarga + persistencia local.
 - **v0.6** ✅ — recorte de clips (`--download-sections`) y subtítulos (descarga e incrustado).
-- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0); pendiente auto-update de ffmpeg, tema claro, sidecars empaquetados, tray e instaladores.
+- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0), descarga de ffmpeg ✅ (v0.7.1); pendiente tema claro, sidecars empaquetados, tray e instaladores.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
 ## Al terminar un cambio

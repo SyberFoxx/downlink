@@ -7,6 +7,24 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-15
+
+### Added
+- **Descarga y actualización de ffmpeg**: Downlink puede bajar su propia copia de `ffmpeg` y `ffprobe` (builds estáticos de [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds)) a `<app_data>/bin`, con las mismas garantías que yt-dlp: verificación **SHA-256** contra `checksums.sha256`, ejecución de prueba (`-version`) y sustitución atómica
+- **Instalación automática si falta** (activable en Ajustes, activada por defecto): al arrancar, si no se encuentra ningún ffmpeg, se descarga en segundo plano. Si ya tienes ffmpeg del sistema, se respeta y no se toca
+- **Actualización manual desde Ajustes**: la sección Motor muestra el estado de ffmpeg, permite buscar/descargar/actualizar a mano con barra de progreso, y refresca versión y origen al terminar
+- Nuevos comandos `check_ffmpeg_update` y `update_ffmpeg`, y nueva opción `autoDownloadFfmpeg` en los ajustes persistidos
+- Nuevo componente `EngineUpdateRow.svelte` reutilizado por los dos motores (yt-dlp y ffmpeg)
+- 8 tests nuevos del actualizador (16 en `updater.rs`, 67 en total) más un test de integración opcional que valida la extracción contra un archivo real de BtbN
+
+### Changed
+- El evento `engine-update` incluye ahora el motor (`yt-dlp` o `ffmpeg`) para que cada fila de Ajustes muestre solo su progreso
+
+### Notes
+- Los builds de ffmpeg son grandes (~150 MB comprimidos, ~340 MB `ffmpeg` + `ffprobe` en disco) y se regeneran a diario, así que **no se refresca solo**: la descarga automática es solo para cuando falta ffmpeg y la actualización de una copia existente es manual
+- Solo se ofrecen builds de ffmpeg para **Linux y Windows** (x86_64 y arm64); en macOS u otras plataformas se usa el ffmpeg del sistema
+- El archivo descargado se desempaqueta en Rust (`tar`+`lzma-rs` para `.tar.xz`, `zip` para `.zip`), sin depender de `tar`, `xz` ni `unzip` del sistema
+
 ## [0.7.0] - 2026-10-15
 
 ### Added
