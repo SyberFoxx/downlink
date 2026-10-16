@@ -8,6 +8,11 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 ## [Unreleased]
 
 ### Added
+- **Carpeta de descarga configurable**: en Ajustes se elige dónde guardar los archivos (se crea si no existe); por defecto sigue siendo la carpeta de Descargas del sistema
+- **SponsorBlock**: se pueden **quitar** o **marcar** los segmentos promocionales de YouTube eligiendo las categorías a tratar (patrocinio, autopromoción, interacción, intro, outro, avance, relleno y música fuera de tema)
+- **Cola que persiste entre sesiones**: la cola de pendientes se guarda en `queue.json` y se recupera al abrir la app (las que estaban en vuelo vuelven como pendientes, para que yt-dlp reanude el `.part`; las pausadas se quedan pausadas); se puede desactivar en Ajustes
+- **Notificaciones al terminar**: la app avisa con una notificación del sistema cuando una descarga termina o falla, solo si la ventana no está delante; se puede desactivar en Ajustes
+- **Bandeja del sistema**: icono con menú «Mostrar Downlink» / «Salir», clic izquierdo para mostrar la ventana y un tooltip con el estado de la cola; el ajuste opcional «Mantener en la bandeja al cerrar la ventana» (desactivado por defecto) deja la app en marcha en segundo plano
 - **Reintentar**: los trabajos fallidos o cancelados tienen botón «Reintentar», que los reencola con las mismas opciones (nuevo comando `retry_download`)
 - **Avisos emergentes (toasts)** en la esquina inferior derecha: los fallos que antes pasaban en silencio (sobre todo al guardar ajustes) ahora se ven
 - **Pegar o arrastrar enlaces desde cualquier vista**: estando en Historial o Ajustes, un enlace pegado o soltado salta a Descargas y se analiza al momento

@@ -1,13 +1,18 @@
 mod engine;
 mod history;
 mod queue;
+mod queue_store;
 mod settings;
 mod theme;
+#[cfg(desktop)]
+mod tray;
 mod updater;
 mod ytdlp;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
+use tauri::WindowEvent;
 use tauri::{Manager, State};
 
 use history::HistoryState;
@@ -17,6 +22,21 @@ use ytdlp::DownloadOptions;
 
 /// Estado global de la cola de descargas.
 struct QueueState(Arc<Queue>);
+
+/// Banderas en tiempo de ejecución para la UX de escritorio.
+struct RuntimeFlags {
+    close_to_tray: AtomicBool,
+    tray_available: AtomicBool,
+}
+
+impl RuntimeFlags {
+    fn new(close_to_tray: bool, tray_available: bool) -> Self {
+        Self {
+            close_to_tray: AtomicBool::new(close_to_tray),
+            tray_available: AtomicBool::new(tray_available),
+        }
+    }
+}
 
 /// Workaround: WebKitGTK con drivers NVIDIA propietarios choca en Wayland con
 /// "Error 71 (Protocol error)" al usar el renderer dmabuf. Lo deshabilitamos al
@@ -138,7 +158,21 @@ async fn get_settings(app: tauri::AppHandle) -> Result<Settings, String> {
 #[tauri::command]
 async fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
     settings::save(&app, &settings)?;
-    *app.state::<SettingsState>().0.lock().await = settings.clone();
+    {
+        let settings_clone = settings.clone();
+        *app.state::<SettingsState>().0.lock().await = settings_clone;
+    }
+
+    if let Some(flags) = app.try_state::<RuntimeFlags>() {
+        flags
+            .close_to_tray
+            .store(settings.close_to_tray, Ordering::Relaxed);
+    }
+
+    // Si se desactiva la persistencia, no dejamos una cola antigua en disco.
+    if !settings.persist_queue {
+        let _ = queue_store::clear(&app);
+    }
 
     let queue = app.state::<QueueState>().0.clone();
     queue.set_concurrency(settings.concurrency as usize).await;
@@ -198,6 +232,24 @@ async fn read_system_palette() -> Option<theme::SystemPalette> {
     theme::read_system_palette()
 }
 
+/// Carpeta de descargas por defecto del sistema.
+#[tauri::command]
+fn default_download_dir(app: tauri::AppHandle) -> Option<String> {
+    app.path()
+        .download_dir()
+        .ok()
+        .map(|path| path.display().to_string())
+}
+
+/// Indica si la bandeja del sistema está disponible (para poder desactivar el
+/// ajuste «cerrar a la bandeja» en la interfaz cuando no lo está).
+#[tauri::command]
+fn tray_available(app: tauri::AppHandle) -> bool {
+    app.try_state::<RuntimeFlags>()
+        .map(|flags| flags.tray_available.load(Ordering::Relaxed))
+        .unwrap_or(false)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -206,26 +258,58 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             engine::init(app.handle());
             let settings = settings::load(app.handle());
             let concurrency = settings.concurrency as usize;
-            app.manage(SettingsState(tokio::sync::Mutex::new(settings)));
+            app.manage(SettingsState(tokio::sync::Mutex::new(settings.clone())));
             app.manage(HistoryState(tokio::sync::Mutex::new(history::load(
                 app.handle(),
             ))));
-            app.manage(QueueState(Arc::new(Queue::new(
-                app.handle().clone(),
-                concurrency,
-            ))));
+            let queue = Arc::new(Queue::new(app.handle().clone(), concurrency));
+            app.manage(QueueState(queue.clone()));
+
+            // Bandeja del sistema (desktop).
+            let mut tray_available_flag = false;
+            #[cfg(desktop)]
+            {
+                if let Err(error) = tray::setup(app.handle()) {
+                    eprintln!("No se pudo inicializar la bandeja: {error}");
+                } else {
+                    tray_available_flag = true;
+                }
+            }
+            app.manage(RuntimeFlags::new(
+                settings.close_to_tray,
+                tray_available_flag,
+            ));
+
+            // Restaura la cola de la sesión anterior.
+            tauri::async_runtime::spawn(async move {
+                queue.restore(&settings).await;
+            });
 
             // Actualiza los motores en segundo plano al arrancar (si está activado).
-            let handle = app.handle().clone();
+            let handle_updater = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                updater::auto_update(&handle).await;
+                updater::auto_update(&handle_updater).await;
             });
 
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            #[cfg(desktop)]
+            if let WindowEvent::CloseRequested { api, .. } = event
+                && let Some(flags) = window.try_state::<RuntimeFlags>()
+            {
+                let close_to_tray = flags.close_to_tray.load(Ordering::Relaxed);
+                let tray_available = flags.tray_available.load(Ordering::Relaxed);
+                if close_to_tray && tray_available && window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             probe_url,
@@ -249,7 +333,9 @@ pub fn run() {
             check_ffmpeg_update,
             update_ffmpeg,
             read_wallpaper,
-            read_system_palette
+            read_system_palette,
+            default_download_dir,
+            tray_available
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

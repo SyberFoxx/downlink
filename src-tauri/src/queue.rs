@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdout};
@@ -18,7 +18,7 @@ pub const QUEUE_EVENT: &str = "queue-updated";
 /// Intervalo mínimo entre emisiones de progreso (evita saturar el frontend).
 const EMIT_INTERVAL: Duration = Duration::from_millis(200);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum JobStatus {
     Queued,
@@ -45,10 +45,15 @@ impl JobStatus {
     pub fn is_finished(self) -> bool {
         matches!(self, Self::Done | Self::Error | Self::Cancelled)
     }
+
+    /// ¿Está ejecutándose (descargando o postprocesando)?
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::Downloading | Self::Processing)
+    }
 }
 
-/// Vista serializable de un trabajo para el frontend.
-#[derive(Debug, Clone, Serialize)]
+/// Vista serializable de un trabajo para el frontend y para `queue.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobView {
     pub id: u64,
@@ -67,7 +72,7 @@ pub struct JobView {
 }
 
 impl JobView {
-    fn new(
+    pub fn new(
         id: u64,
         url: String,
         title: String,
@@ -169,6 +174,35 @@ fn requeue_finished(jobs: &mut [JobView], id: u64) -> bool {
     true
 }
 
+/// Trabajos que se conservan entre sesiones: los que aún no han terminado.
+/// Los que estaban en curso vuelven como pendientes, para que yt-dlp reanude
+/// el archivo `.part`; los pausados se quedan pausados.
+fn restorable_jobs(jobs: &[JobView]) -> Vec<JobView> {
+    jobs.iter()
+        .filter(|job| !job.status.is_finished())
+        .map(|job| {
+            let mut view = job.clone();
+            view.status = match view.status {
+                JobStatus::Paused => JobStatus::Paused,
+                _ => JobStatus::Queued,
+            };
+            view.percent = None;
+            view.downloaded_bytes = None;
+            view.total_bytes = None;
+            view.speed_bps = None;
+            view.eta_secs = None;
+            view.file_path = None;
+            view.message = None;
+            view
+        })
+        .collect()
+}
+
+/// Siguiente id libre: el mayor de los trabajos restaurados o el guardado.
+fn next_id_from(jobs: &[JobView], stored: u64) -> u64 {
+    jobs.iter().map(|job| job.id).max().unwrap_or(0).max(stored)
+}
+
 impl Queue {
     pub fn new(app: AppHandle, concurrency: usize) -> Self {
         Self {
@@ -231,6 +265,7 @@ impl Queue {
             }
         }
         self.emit().await;
+        self.persist().await;
     }
 
     /// Reanuda un trabajo pausado.
@@ -274,6 +309,7 @@ impl Queue {
             }
         }
         self.emit().await;
+        self.persist().await;
     }
 
     /// Reintenta un trabajo fallido o cancelado conservando sus opciones.
@@ -297,6 +333,7 @@ impl Queue {
         };
         if changed {
             self.emit().await;
+            self.persist().await;
         }
     }
 
@@ -311,11 +348,12 @@ impl Queue {
             }
         }
         self.emit().await;
+        self.persist().await;
     }
 
     /// Arranca pendientes hasta el límite de concurrencia.
     pub async fn pump(self: &Arc<Self>, settings: Settings) {
-        let out_dir = self.app.path().download_dir().ok();
+        let out_dir = crate::settings::download_dir(&self.app, &settings);
         let mut runners: Vec<(u64, ChildStdout, ChildStderr)> = Vec::new();
 
         {
@@ -327,11 +365,13 @@ impl Queue {
                     break;
                 };
 
-                let Some(dir) = out_dir.as_deref() else {
-                    inner.jobs[pos].status = JobStatus::Error;
-                    inner.jobs[pos].message =
-                        Some("No se encontró la carpeta de Descargas.".to_string());
-                    continue;
+                let dir = match &out_dir {
+                    Ok(dir) => dir,
+                    Err(message) => {
+                        inner.jobs[pos].status = JobStatus::Error;
+                        inner.jobs[pos].message = Some(message.clone());
+                        continue;
+                    }
                 };
 
                 let id = inner.jobs[pos].id;
@@ -354,6 +394,7 @@ impl Queue {
         }
 
         self.emit().await;
+        self.persist().await;
 
         for (id, stdout, stderr) in runners {
             self.clone().run_job(id, stdout, stderr);
@@ -463,6 +504,7 @@ impl Queue {
 
         // 2) Fija el estado final (salvo si un comando ya lo dejó terminal).
         let mut completed: Option<HistoryEntry> = None;
+        let mut notify_info: Option<(String, bool)> = None;
         {
             let mut inner = self.inner.lock().await;
             let Some(job) = inner.jobs.iter_mut().find(|j| j.id == id) else {
@@ -479,18 +521,21 @@ impl Queue {
                 job.speed_bps = None;
                 job.eta_secs = None;
                 job.file_path = final_path;
+                let file_path = job.file_path.clone();
                 completed = Some(HistoryEntry::new(
                     job.url.clone(),
                     job.title.clone(),
                     job.thumbnail.clone(),
-                    job.file_path.clone(),
+                    file_path,
                     job.options.clone(),
                 ));
+                notify_info = Some((job.title.clone(), true));
             } else {
                 job.status = JobStatus::Error;
                 job.speed_bps = None;
                 job.eta_secs = None;
                 job.message = Some(ytdlp::friendly_error(stderr_text));
+                notify_info = Some((job.title.clone(), false));
             }
         }
 
@@ -501,11 +546,85 @@ impl Queue {
             state.record(&self.app, entry).await;
         }
 
+        // 4) Avisa al sistema si la ventana no está delante.
+        if let Some((title, ok)) = notify_info {
+            self.notify_finished(title, ok).await;
+        }
+
         self.emit().await;
 
-        // 4) Hueco libre: intenta arrancar el siguiente pendiente.
+        // 5) Hueco libre: intenta arrancar el siguiente pendiente.
         let settings = self.current_settings().await;
         self.pump(settings).await;
+    }
+
+    /// Recupera los trabajos guardados de la sesión anterior.
+    pub async fn restore(self: &Arc<Self>, settings: &Settings) {
+        if !settings.persist_queue {
+            return;
+        }
+        let Some(stored) = crate::queue_store::load(&self.app) else {
+            return;
+        };
+        let jobs = restorable_jobs(&stored.jobs);
+        if jobs.is_empty() {
+            return;
+        }
+        {
+            let mut inner = self.inner.lock().await;
+            inner.next_id = next_id_from(&jobs, stored.next_id);
+            inner.jobs = jobs;
+        }
+        self.emit().await;
+        self.pump(settings.clone()).await;
+    }
+
+    /// Muestra una notificación del sistema al terminar una descarga (solo si
+    /// está activada y la ventana no tiene el foco: si está delante, ya se ve).
+    async fn notify_finished(&self, title: String, success: bool) {
+        let settings = self.current_settings().await;
+        if !settings.notify_on_finish {
+            return;
+        }
+        #[cfg(desktop)]
+        {
+            if let Some(window) = self.app.get_webview_window("main")
+                && window.is_focused().unwrap_or(false)
+            {
+                return;
+            }
+            use tauri_plugin_notification::NotificationExt;
+            let heading = if success {
+                "Descarga completada"
+            } else {
+                "La descarga falló"
+            };
+            let _ = self
+                .app
+                .notification()
+                .builder()
+                .title(heading)
+                .body(title)
+                .show();
+        }
+        #[cfg(not(desktop))]
+        let _ = (title, success);
+    }
+
+    /// Guarda en disco los trabajos pendientes (si está activado en Ajustes).
+    async fn persist(&self) {
+        let settings = self.current_settings().await;
+        if !settings.persist_queue {
+            return;
+        }
+        let queue = {
+            let inner = self.inner.lock().await;
+            crate::queue_store::PersistedQueue {
+                next_id: inner.next_id,
+                jobs: restorable_jobs(&inner.jobs),
+            }
+        };
+        let _ = crate::queue_store::save(&self.app, &queue);
     }
 
     async fn current_settings(&self) -> Settings {
@@ -514,7 +633,9 @@ impl Queue {
 
     async fn emit(&self) {
         let jobs = self.inner.lock().await.jobs.clone();
-        let _ = self.app.emit(QUEUE_EVENT, jobs);
+        let _ = self.app.emit(QUEUE_EVENT, &jobs);
+        #[cfg(desktop)]
+        crate::tray::sync_tooltip(&self.app, &jobs);
     }
 }
 
@@ -629,5 +750,51 @@ mod tests {
         assert!(JobStatus::Error.is_finished());
         assert!(JobStatus::Cancelled.is_finished());
         assert!(!JobStatus::Paused.is_finished());
+        assert!(JobStatus::Downloading.is_active());
+        assert!(JobStatus::Processing.is_active());
+        assert!(!JobStatus::Queued.is_active());
+    }
+
+    #[test]
+    fn restorable_conserva_pendientes_y_pausados_y_limpia_el_progreso() {
+        let mut active = job(1, JobStatus::Downloading);
+        active.percent = Some(40.0);
+        active.downloaded_bytes = Some(1024);
+        active.file_path = Some("/tmp/parcial.mp4".to_string());
+        active.message = Some("no debería quedar".to_string());
+        let paused = job(2, JobStatus::Paused);
+        let queued = job(3, JobStatus::Queued);
+        let done = job(4, JobStatus::Done);
+        let failed = job(5, JobStatus::Error);
+        let cancelled = job(6, JobStatus::Cancelled);
+
+        let jobs = vec![active, paused, queued, done, failed, cancelled];
+        let saved = restorable_jobs(&jobs);
+
+        let ids: Vec<u64> = saved.iter().map(|j| j.id).collect();
+        assert_eq!(ids, vec![1, 2, 3]);
+        // El trabajo en curso vuelve como pendiente y sin progreso heredado.
+        assert_eq!(saved[0].status, JobStatus::Queued);
+        assert_eq!(saved[0].percent, None);
+        assert_eq!(saved[0].downloaded_bytes, None);
+        assert_eq!(saved[0].file_path, None);
+        assert_eq!(saved[0].message, None);
+        // El pausado se queda pausado.
+        assert_eq!(saved[1].status, JobStatus::Paused);
+        assert_eq!(saved[2].status, JobStatus::Queued);
+    }
+
+    #[test]
+    fn siguiente_id_toma_el_mayor() {
+        let jobs = vec![job(2, JobStatus::Queued), job(7, JobStatus::Paused)];
+        assert_eq!(next_id_from(&jobs, 3), 7);
+        assert_eq!(next_id_from(&jobs, 20), 20);
+        assert_eq!(next_id_from(&[], 9), 9);
+    }
+
+    #[test]
+    fn restorable_ignora_una_cola_ya_terminada() {
+        let jobs = vec![job(1, JobStatus::Done), job(2, JobStatus::Cancelled)];
+        assert!(restorable_jobs(&jobs).is_empty());
     }
 }

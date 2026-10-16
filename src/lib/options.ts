@@ -25,6 +25,9 @@ export function defaultOptions(): DownloadOptions {
     subtitleLangs: "es",
     subtitleAuto: true,
     embedSubtitles: true,
+    sponsorblock: false,
+    sponsorblockMode: "remove",
+    sponsorblockCategories: ["sponsor", "selfpromo"],
   };
 }
 
@@ -77,6 +80,25 @@ export const AUDIO_QUALITIES = [
   { id: "256K", label: "256 kbps" },
   { id: "192K", label: "192 kbps" },
   { id: "128K", label: "128 kbps" },
+];
+
+/**
+ * Categorías de SponsorBlock que la app ofrece. Deben coincidir con
+ * `SPONSORBLOCK_CATEGORIES` del backend (src-tauri/src/ytdlp.rs).
+ */
+export const SPONSORBLOCK_CATEGORIES = [
+  { id: "sponsor", label: "Patrocinio", description: "Mención pagada del vídeo" },
+  { id: "selfpromo", label: "Autopromoción", description: "Promo de sus propios productos" },
+  { id: "interaction", label: "Interacción", description: "Petición de likes y suscripción" },
+  { id: "intro", label: "Intro", description: "Cabecera o introducción" },
+  { id: "outro", label: "Outro", description: "Cierre o despedida" },
+  { id: "preview", label: "Avance", description: "Resumen de lo que viene" },
+  { id: "filler", label: "Relleno", description: "Divagaciones sin relación" },
+  {
+    id: "music_offtopic",
+    label: "Música fuera de tema",
+    description: "Sección musical no musical",
+  },
 ];
 
 /** Formatos sin recompresión posible (no aplica calidad kbps). */
@@ -201,6 +223,11 @@ export function summarizeOptions(options: DownloadOptions): string {
   }
   if (options.subtitles) {
     parts.push(options.embedSubtitles ? "subs incrustados" : "subtítulos");
+  }
+  if (options.sponsorblock) {
+    parts.push(
+      options.sponsorblockMode === "mark" ? "segmentos marcados" : "sin patrocinios",
+    );
   }
 
   return parts.join(" · ");

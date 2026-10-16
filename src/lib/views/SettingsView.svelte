@@ -3,10 +3,13 @@
   import {
     checkFfmpegUpdate,
     checkYtdlpUpdate,
+    defaultDownloadDir,
     detectBrowsers,
     engineInfo,
     pickCookiesFile,
+    pickDownloadFolder,
     probeUrl,
+    trayAvailable,
     updateFfmpeg,
     updateYtdlp,
   } from "$lib/api";
@@ -23,6 +26,11 @@
   let loaded = $state(false);
   let saving = $state(false);
   let saved = $state(false);
+
+  /** Carpeta de descargas del sistema (se muestra como referencia). */
+  let systemDir = $state<string | null>(null);
+  /** `true`/`false` si el sistema confirma; `null` si aún no se sabe. */
+  let trayOk = $state<boolean | null>(null);
 
   let testing = $state(false);
   let testResult = $state<{ ok: boolean; message: string } | null>(null);
@@ -50,12 +58,16 @@
     // el usuario ve el aviso (antes la vista se quedaba cargando para siempre).
     await settings.load();
     try {
-      const [detected, info] = await Promise.all([
+      const [detected, info, defaultDir, hasTray] = await Promise.all([
         detectBrowsers(),
         engineInfo(),
+        defaultDownloadDir(),
+        trayAvailable(),
       ]);
       browsers = detected;
       engine = info;
+      systemDir = defaultDir;
+      trayOk = hasTray;
       if (!settings.value.cookiesBrowser && detected.length > 0) {
         settings.value.cookiesBrowser = detected[0].id;
       }
@@ -94,6 +106,15 @@
       if (file) settings.value.cookiesFile = file;
     } catch (e) {
       toast.error(`No se pudo abrir el selector de archivos. ${extractError(e)}`);
+    }
+  }
+
+  async function chooseFolder() {
+    try {
+      const folder = await pickDownloadFolder();
+      if (folder) settings.value.downloadDir = folder;
+    } catch (e) {
+      toast.error(`No se pudo abrir el selector de carpetas. ${extractError(e)}`);
     }
   }
 
@@ -317,6 +338,98 @@
     <p class="mt-1.5 text-[11px] text-ink-faint">
       Aplica de inmediato: si subes el número, arrancan los pendientes de la cola.
     </p>
+  </section>
+
+  <!-- Descargas y comportamiento -->
+  <section class="mb-8">
+    <h2 class="mb-1 text-sm font-medium text-ink-strong">Descargas</h2>
+    <p class="mb-4 text-xs text-ink-muted">
+      Dónde se guardan los archivos y qué ocurre al terminar o al cerrar la ventana.
+    </p>
+
+    <span class="mb-1 block text-xs text-ink-muted">Carpeta de destino</span>
+    <div class="flex flex-wrap gap-2">
+      <input
+        type="text"
+        readonly
+        value={settings.value.downloadDir ?? ""}
+        placeholder={systemDir
+          ? `Sistema · ${systemDir}`
+          : "Carpeta de Descargas del sistema"}
+        aria-label="Carpeta de destino de las descargas"
+        class="min-w-0 flex-1 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+      />
+      <button
+        class="rounded-lg border border-line px-3 text-sm text-ink-strong transition-colors hover:bg-surface"
+        onclick={chooseFolder}
+      >
+        Elegir…
+      </button>
+      {#if settings.value.downloadDir}
+        <button
+          class="rounded-lg border border-line px-3 text-sm text-ink-soft transition-colors hover:bg-surface hover:text-ink"
+          onclick={() => (settings.value.downloadDir = null)}
+        >
+          Usar la del sistema
+        </button>
+      {/if}
+    </div>
+    <p class="mt-1.5 text-[11px] text-ink-faint">
+      Se crea si no existe. Se aplica a las descargas nuevas.
+    </p>
+
+    <div class="mt-4 space-y-3">
+      <label class="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          bind:checked={settings.value.persistQueue}
+          class="mt-0.5 size-3.5 accent-accent"
+        />
+        <span class="min-w-0">
+          <span class="block text-sm text-ink">Reanudar la cola al abrir la app</span>
+          <span class="block text-xs text-ink-muted">
+            Las descargas pendientes se recuperan y continúan donde quedaron.
+          </span>
+        </span>
+      </label>
+
+      <label class="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          bind:checked={settings.value.notifyOnFinish}
+          class="mt-0.5 size-3.5 accent-accent"
+        />
+        <span class="min-w-0">
+          <span class="block text-sm text-ink">Avisar al terminar cada descarga</span>
+          <span class="block text-xs text-ink-muted">
+            Notificación del sistema cuando la ventana no está delante.
+          </span>
+        </span>
+      </label>
+
+      <label
+        class="flex items-start gap-3 {trayOk === false
+          ? 'cursor-not-allowed opacity-50'
+          : 'cursor-pointer'}"
+      >
+        <input
+          type="checkbox"
+          bind:checked={settings.value.closeToTray}
+          disabled={trayOk === false}
+          class="mt-0.5 size-3.5 accent-accent"
+        />
+        <span class="min-w-0">
+          <span class="block text-sm text-ink">
+            Mantener en la bandeja al cerrar la ventana
+          </span>
+          <span class="block text-xs text-ink-muted">
+            {trayOk === false
+              ? "La bandeja del sistema no está disponible en este equipo."
+              : "Las descargas siguen en marcha; vuelve desde el icono de la bandeja."}
+          </span>
+        </span>
+      </label>
+    </div>
   </section>
 
   <!-- Prueba -->

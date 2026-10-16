@@ -64,11 +64,13 @@ downlink/
 │   │   ├── main.rs              # Entry point
 │   │   ├── lib.rs               # Builder, comandos Tauri, estado, workaround Wayland
 │   │   ├── queue.rs             # Cola de trabajos (estados, concurrencia, pausa, orden)
+│   │   ├── queue_store.rs       # Persistencia de la cola (queue.json)
 │   │   ├── engine.rs            # Resolución de yt-dlp/ffmpeg y su origen (sistema/gestionado/sidecar)
 │   │   ├── updater.rs           # Descarga y auto-update de yt-dlp y ffmpeg (GitHub releases)
 │   │   ├── history.rs           # Historial persistido (history.json), dedupe por enlace
 │   │   ├── settings.rs          # Settings persistidos, detección de navegadores, EngineInfo
 │   │   ├── theme.rs             # Imagen de fondo (data URL) y paleta de pywal/wallust
+│   │   ├── tray.rs              # Icono de bandeja (menú, tooltip); solo escritorio
 │   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
 │   ├── Cargo.toml
 │   └── tauri.conf.json
@@ -129,6 +131,8 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
 | `update_ffmpeg` | — | `UpdateCheck` (descarga ffmpeg+ffprobe; progreso por el evento `engine-update`) |
 | `read_wallpaper` | `path` | `String` (la imagen como `data:` URL) |
 | `read_system_palette` | — | `SystemPalette \| null` (paleta de pywal/wallust, si existe) |
+| `default_download_dir` | — | `String \| null` (carpeta de Descargas del sistema) |
+| `tray_available` | — | `bool` (si la bandeja del sistema está disponible) |
 
 ### La cola (`queue.rs`)
 
@@ -146,6 +150,32 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
   reciente) no hace nada, para no pisar el `finish` en curso.
 - **Quitar**: `cancel_download` marca `cancelled` los trabajos vivos y **quita de
   la lista** los que ya terminaron (`done`/`error`/`cancelled` sin proceso activo).
+- **Persistencia** (`Settings.persist_queue`, activa por defecto): `queue_store.rs`
+  escribe `queue.json` (en `app_config_dir()`) tras cada cambio de cola, con los
+  trabajos no terminados y `next_id`. Al arrancar, `Queue::restore()` los
+  recupera: lo que estaba en vuelo vuelve como `queued` (yt-dlp reanuda el
+  `.part`) y lo pausado sigue pausado, siempre con el progreso a cero. Al
+  desactivar el ajuste, `save_settings` borra el archivo.
+
+### Bandeja, notificaciones y carpeta de descarga
+
+- **Bandeja** (`tray.rs`, módulo con `#[cfg(desktop)]`): icono con menú
+  «Mostrar Downlink» / «Salir», clic izquierdo para mostrar la ventana y tooltip
+  con el estado de la cola. `tray::sync_tooltip()` solo escribe si el texto
+  cambió, así que se llama en cada `emit()`. Si el sistema no tiene bandeja,
+  `setup()` falla sin romper nada y la app sigue normal (bandera `tray_available`).
+  El icono usa `app.default_window_icon()`.
+- **Cerrar a la bandeja** (`Settings.close_to_tray`, desactivado por defecto):
+  `on_window_event` llama `api.prevent_close()` y oculta la ventana, **solo** si
+  la bandeja arrancó de verdad (comprobación de seguridad con `tray_available`).
+- **Notificaciones** (`tauri-plugin-notification`, vía `NotificationExt`):
+  `Queue::notify_finished()` avisa al terminar o fallar, pero **solo** con
+  `Settings.notify_on_finish` activo y **solo si la ventana no tiene el foco**
+  (si está delante, el usuario ya lo ve).
+- **Carpeta de descarga** (`Settings.download_dir`): `settings::download_dir()`
+  resuelve la carpeta configurada (creándola con `create_dir_all`) o, si no hay,
+  la del sistema. El comando `default_download_dir` la expone para que la UI
+  muestre la referencia. Es donde `pump()` le pasa el `dir` a `spawn_process`.
 
 ### Evento de cola
 

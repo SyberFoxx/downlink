@@ -34,6 +34,9 @@ export type JobStatus =
 
 export type MediaMode = "video" | "audio";
 
+/** Qué hacer con los segmentos detectados por SponsorBlock. */
+export type SponsorBlockMode = "remove" | "mark";
+
 export interface DownloadOptions {
   mode: MediaMode;
   videoHeight: number | null;
@@ -56,6 +59,12 @@ export interface DownloadOptions {
   subtitleAuto: boolean;
   /** Incrusta los subtítulos en el vídeo en vez de dejar archivos .srt. */
   embedSubtitles: boolean;
+  /** Quita o marca segmentos promocionales con SponsorBlock (solo YouTube). */
+  sponsorblock: boolean;
+  /** Qué hacer con los segmentos: quitar o marcar como capítulos. */
+  sponsorblockMode: SponsorBlockMode;
+  /** Categorías a tratar (vacío = `sponsor`). */
+  sponsorblockCategories: string[];
 }
 
 /** Un trabajo de la cola, tal como lo reporta el backend. */
@@ -115,6 +124,14 @@ export interface Settings {
   autoUpdateYtdlp: boolean;
   /** Descarga ffmpeg al arrancar si no hay ninguno disponible. */
   autoDownloadFfmpeg: boolean;
+  /** Carpeta de destino de las descargas (null = la del sistema). */
+  downloadDir: string | null;
+  /** Reanuda las descargas pendientes al abrir la app. */
+  persistQueue: boolean;
+  /** Muestra una notificación del sistema al terminar una descarga. */
+  notifyOnFinish: boolean;
+  /** Mantiene la app en la bandeja al cerrar la ventana. */
+  closeToTray: boolean;
   /** Apariencia: tema, acento e imagen de fondo. */
   theme: ThemeSettings;
 }

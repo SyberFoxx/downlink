@@ -88,6 +88,18 @@ pub struct Settings {
     /// diario, así que actualizar una copia existente queda a mano en Ajustes.
     #[serde(default = "default_true")]
     pub auto_download_ffmpeg: bool,
+    /// Carpeta de destino de las descargas. `None` = la estándar del sistema.
+    #[serde(default)]
+    pub download_dir: Option<String>,
+    /// Reanuda las descargas pendientes al abrir la app.
+    #[serde(default = "default_true")]
+    pub persist_queue: bool,
+    /// Avisa con una notificación del sistema al terminar cada descarga.
+    #[serde(default = "default_true")]
+    pub notify_on_finish: bool,
+    /// Mantiene la app en marcha (en la bandeja) al cerrar la ventana.
+    #[serde(default)]
+    pub close_to_tray: bool,
     /// Preferencias de apariencia.
     #[serde(default)]
     pub theme: ThemeSettings,
@@ -102,6 +114,10 @@ impl Default for Settings {
             concurrency: DEFAULT_CONCURRENCY,
             auto_update_ytdlp: true,
             auto_download_ffmpeg: true,
+            download_dir: None,
+            persist_queue: true,
+            notify_on_finish: true,
+            close_to_tray: false,
             theme: ThemeSettings::default(),
         }
     }
@@ -182,4 +198,81 @@ pub fn save(app: &AppHandle, settings: &Settings) -> Result<(), String> {
     let json = serde_json::to_string_pretty(settings)
         .map_err(|e| format!("No se pudo serializar la configuración: {e}"))?;
     std::fs::write(&path, json).map_err(|e| format!("No se pudo guardar la configuración: {e}"))
+}
+
+/// Carpeta elegida por el usuario, si la hay (ignora cadenas vacías).
+fn configured_dir(settings: &Settings) -> Option<PathBuf> {
+    settings
+        .download_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Carpeta donde se guardan las descargas: la elegida por el usuario o la
+/// estándar del sistema. La elegida se crea si todavía no existe.
+pub fn download_dir(app: &AppHandle, settings: &Settings) -> Result<PathBuf, String> {
+    if let Some(dir) = configured_dir(settings) {
+        if !dir.is_dir() {
+            std::fs::create_dir_all(&dir).map_err(|e| {
+                format!(
+                    "No se pudo usar la carpeta de descargas «{}»: {e}",
+                    dir.display()
+                )
+            })?;
+        }
+        return Ok(dir);
+    }
+
+    let dir = app
+        .path()
+        .download_dir()
+        .map_err(|_| "No se encontró la carpeta de Descargas.".to_string())?;
+    if !dir.is_dir() {
+        return Err(format!(
+            "La carpeta de Descargas «{}» no existe.",
+            dir.display()
+        ));
+    }
+    Ok(dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn usa_la_carpeta_configurada_si_hay() {
+        let settings = Settings {
+            download_dir: Some("/tmp/downlink-descargas".to_string()),
+            ..Settings::default()
+        };
+        assert_eq!(
+            configured_dir(&settings),
+            Some(PathBuf::from("/tmp/downlink-descargas"))
+        );
+    }
+
+    #[test]
+    fn ignora_una_carpeta_vacia_o_en_blanco() {
+        for value in [Some(String::new()), Some("   ".to_string()), None] {
+            let settings = Settings {
+                download_dir: value,
+                ..Settings::default()
+            };
+            assert!(configured_dir(&settings).is_none());
+        }
+    }
+
+    #[test]
+    fn los_ajustes_antiguos_siguen_cargando() {
+        // Un settings.json sin los campos nuevos usa los valores por defecto.
+        let json = r#"{"cookiesMode":"none","cookiesBrowser":null,"cookiesFile":null}"#;
+        let settings: Settings = serde_json::from_str(json).expect("debería deserializar");
+        assert_eq!(settings.download_dir, None);
+        assert!(settings.persist_queue);
+        assert!(settings.notify_on_finish);
+        assert!(!settings.close_to_tray);
+    }
 }

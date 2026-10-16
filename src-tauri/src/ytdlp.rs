@@ -112,6 +112,33 @@ pub enum MediaMode {
     Audio,
 }
 
+/// Qué hacer con los segmentos detectados por SponsorBlock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SponsorBlockMode {
+    /// Quitar los segmentos del archivo final.
+    #[default]
+    Remove,
+    /// Dejar los segmentos, marcados como capítulos.
+    Mark,
+}
+
+/// Categorías de SponsorBlock que la app ofrece. Las desconocidas se ignoran
+/// antes de llegar a la línea de comandos.
+pub const SPONSORBLOCK_CATEGORIES: [&str; 8] = [
+    "sponsor",
+    "selfpromo",
+    "interaction",
+    "intro",
+    "outro",
+    "preview",
+    "filler",
+    "music_offtopic",
+];
+
+/// Categoría que se usa cuando SponsorBlock está activo sin ninguna marcada.
+const DEFAULT_SPONSORBLOCK_CATEGORY: &str = "sponsor";
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DownloadOptions {
@@ -152,6 +179,15 @@ pub struct DownloadOptions {
     /// Incrusta los subtítulos en el vídeo en vez de dejar archivos .srt.
     #[serde(default)]
     pub embed_subtitles: bool,
+    /// Quita o marca segmentos promocionales con SponsorBlock (solo YouTube).
+    #[serde(default)]
+    pub sponsorblock: bool,
+    /// Qué hacer con los segmentos: quitar (`remove`) o marcar (`mark`).
+    #[serde(default)]
+    pub sponsorblock_mode: SponsorBlockMode,
+    /// Categorías a tratar. Vacío = la categoría por defecto (`sponsor`).
+    #[serde(default)]
+    pub sponsorblock_categories: Vec<String>,
 }
 
 impl DownloadOptions {
@@ -182,6 +218,25 @@ impl DownloadOptions {
             .map(timecode)
             .unwrap_or_else(|| "inf".to_string());
         Some(format!("*{}-{end}", timecode(start)))
+    }
+
+    /// Categorías de SponsorBlock listas para la línea de comandos: se quitan
+    /// las desconocidas y los repetidos; si no queda ninguna, la de por defecto.
+    fn sponsorblock_categories(&self) -> String {
+        let mut seen = std::collections::HashSet::new();
+        let selected: Vec<String> = self
+            .sponsorblock_categories
+            .iter()
+            .map(|category| category.trim().to_lowercase())
+            .filter(|category| SPONSORBLOCK_CATEGORIES.contains(&category.as_str()))
+            .filter(|category| seen.insert(category.clone()))
+            .collect();
+
+        if selected.is_empty() {
+            DEFAULT_SPONSORBLOCK_CATEGORY.to_string()
+        } else {
+            selected.join(",")
+        }
     }
 }
 
@@ -256,6 +311,15 @@ pub fn build_download_args(
             args.push("--convert-subs".into());
             args.push("srt".into());
         }
+    }
+
+    if options.sponsorblock {
+        let flag = match options.sponsorblock_mode {
+            SponsorBlockMode::Mark => "--sponsorblock-mark",
+            SponsorBlockMode::Remove => "--sponsorblock-remove",
+        };
+        args.push(flag.to_string());
+        args.push(options.sponsorblock_categories());
     }
 
     let filters = options.audio_filters();
@@ -1067,6 +1131,51 @@ mod tests {
     }
 
     #[test]
+    fn sponsorblock_anade_remove_con_categorias() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            sponsorblock: true,
+            sponsorblock_mode: SponsorBlockMode::Remove,
+            sponsorblock_categories: vec!["sponsor".to_string(), "intro".to_string()],
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(args.iter().any(|a| a == "--sponsorblock-remove"));
+        assert!(args.iter().any(|a| a == "sponsor,intro"));
+    }
+
+    #[test]
+    fn sponsorblock_usa_defecto_si_vacio() {
+        let options = DownloadOptions {
+            mode: MediaMode::Audio,
+            sponsorblock: true,
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(args.iter().any(|a| a == "sponsor"));
+    }
+
+    #[test]
+    fn sponsorblock_mark_anade_flag() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            sponsorblock: true,
+            sponsorblock_mode: SponsorBlockMode::Mark,
+            sponsorblock_categories: vec!["interaction".to_string()],
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(args.iter().any(|a| a == "--sponsorblock-mark"));
+    }
+
+    #[test]
+    fn sponsorblock_sin_activo_no_anade_flags() {
+        let options = DownloadOptions::default();
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(!args.iter().any(|a| a.contains("sponsorblock")));
+    }
+
+    #[test]
     fn sin_recorte_no_pasa_download_sections() {
         let options = DownloadOptions::default();
         let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
@@ -1197,6 +1306,39 @@ mod tests {
             ]
         });
         assert_eq!(thumbnail_url(&json).as_deref(), Some("https://x/big.jpg"));
+    }
+
+    #[test]
+    fn sponsorblock_categorias_desconocidas_se_ignoran() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            sponsorblock: true,
+            sponsorblock_categories: vec!["sponsor".to_string(), "hack".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(options.sponsorblock_categories(), "sponsor");
+    }
+
+    #[test]
+    fn sponsorblock_categorias_repetidas_se_quitan() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            sponsorblock: true,
+            sponsorblock_categories: vec!["intro".to_string(), "intro".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(options.sponsorblock_categories(), "intro");
+    }
+
+    #[test]
+    fn sponsorblock_acepta_categorias_con_espacios() {
+        let options = DownloadOptions {
+            mode: MediaMode::Video,
+            sponsorblock: true,
+            sponsorblock_categories: vec![" Selfpromo ".to_string()],
+            ..Default::default()
+        };
+        assert_eq!(options.sponsorblock_categories(), "selfpromo");
     }
 
     #[test]

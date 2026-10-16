@@ -11,6 +11,10 @@ export const DEFAULT_SETTINGS: Settings = {
   concurrency: 2,
   autoUpdateYtdlp: true,
   autoDownloadFfmpeg: true,
+  downloadDir: null,
+  persistQueue: true,
+  notifyOnFinish: true,
+  closeToTray: false,
   theme: {
     themeId: "downlink-dark",
     accent: null,

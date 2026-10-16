@@ -137,6 +137,26 @@ export async function pickWallpaper(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
+/** Elige la carpeta donde guardar las descargas. */
+export async function pickDownloadFolder(): Promise<string | null> {
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    title: "Elige la carpeta de descargas",
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+/** Carpeta de descargas por defecto del sistema. */
+export function defaultDownloadDir(): Promise<string | null> {
+  return invoke<string | null>("default_download_dir");
+}
+
+/** ¿Está disponible la bandeja del sistema? */
+export function trayAvailable(): Promise<boolean> {
+  return invoke<boolean>("tray_available");
+}
+
 /** Lee la imagen de fondo y la devuelve como data URL lista para usar en CSS. */
 export function readWallpaper(path: string): Promise<string> {
   return invoke<string>("read_wallpaper", { path });

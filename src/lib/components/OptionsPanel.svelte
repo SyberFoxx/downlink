@@ -1,9 +1,10 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import type { DownloadOptions, ProbeInfo } from "$lib/types";
+  import type { DownloadOptions, ProbeInfo, SponsorBlockMode } from "$lib/types";
   import {
     AUDIO_FORMATS,
     AUDIO_QUALITIES,
+    SPONSORBLOCK_CATEGORIES,
     VIDEO_CONTAINERS,
     PRESETS,
     availableHeightsFor,
@@ -45,6 +46,19 @@
   ] as PresetId[]);
 
   let activePreset = $state<PresetId | null>(null);
+
+  const sponsorblockModes: { id: SponsorBlockMode; label: string }[] = [
+    { id: "remove", label: "Quitar" },
+    { id: "mark", label: "Marcar" },
+  ];
+
+  /** Marca o desmarca una categoría de SponsorBlock (crea un array nuevo). */
+  function toggleCategory(id: string) {
+    const selected = options.sponsorblockCategories;
+    options.sponsorblockCategories = selected.includes(id)
+      ? selected.filter((category) => category !== id)
+      : [...selected, id];
+  }
 
   // Recorte: texto editable en la UI, sincronizado a segundos en las opciones.
   // `untrack` marca la lectura inicial de las opciones como intencionada.
@@ -378,6 +392,64 @@
         </div>
       </div>
     {/if}
+
+    <!-- SponsorBlock (solo YouTube) -->
+    <div class="col-span-2 border-t border-line/40 pt-3">
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <label
+          class="flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-wide text-ink-muted"
+        >
+          <input
+            type="checkbox"
+            bind:checked={options.sponsorblock}
+            class="size-3.5 accent-accent"
+          />
+          SponsorBlock
+        </label>
+        {#if options.sponsorblock}
+          <div class="flex rounded-lg border border-line bg-canvas/60 p-0.5">
+            {#each sponsorblockModes as mode (mode.id)}
+              <button
+                class="rounded-md px-2.5 py-0.5 text-[11px] transition-colors {options.sponsorblockMode ===
+                mode.id
+                  ? 'bg-elevated text-ink'
+                  : 'text-ink-muted hover:text-ink-strong'}"
+                onclick={() => (options.sponsorblockMode = mode.id)}
+              >
+                {mode.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      {#if options.sponsorblock}
+        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+          {#each SPONSORBLOCK_CATEGORIES as category (category.id)}
+            <label
+              class="flex cursor-pointer items-center gap-1.5 text-xs text-ink-soft"
+              title={category.description}
+            >
+              <input
+                type="checkbox"
+                checked={options.sponsorblockCategories.includes(category.id)}
+                onchange={() => toggleCategory(category.id)}
+                class="size-3.5 accent-accent"
+              />
+              {category.label}
+            </label>
+          {/each}
+        </div>
+        <p class="mt-1.5 text-[11px] text-ink-faint">
+          Solo en YouTube. {options.sponsorblockMode === "remove"
+            ? "Los segmentos se quitan del archivo."
+            : "Los segmentos se marcan como capítulos."}
+          {#if options.sponsorblockCategories.length === 0}
+            Sin categorías marcadas se quita solo «Patrocinio».
+          {/if}
+        </p>
+      {/if}
+    </div>
 
     {#if reencodes}
       <p class="col-span-2 text-[11px] text-warn/90">
