@@ -1,10 +1,57 @@
 @import "tailwindcss";
 
-/* Dark-first: la clase .dark en <html> activa la variante dark por defecto */
-@custom-variant dark (&:where(.dark, .dark *));
+/* Tokens semánticos de la interfaz. Los temas los sobrescriben en tiempo de
+   ejecución (desde `themes.ts`), así que cambiar una variable repinta toda la
+   app sin recompilar CSS. `@theme inline` hace que las utilidades de Tailwind
+   usen `var(--token)` directamente en vez de un valor fijo. */
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-strong: var(--ink-strong);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+}
 
+/* Tema por defecto (oscuro, estilo Linear). Se define aquí para que la app
+   arranque ya pintada y no parpadee en claro antes de aplicar el tema guardado. */
 :root {
   color-scheme: dark;
+
+  --canvas: #030712;
+  --surface: #111827;
+  --elevated: #1f2937;
+  --line: #1f2937;
+  --line-strong: #374151;
+  --ink: #f3f4f6;
+  --ink-strong: #d1d5db;
+  --ink-soft: #9ca3af;
+  --ink-muted: #6b7280;
+  --ink-faint: #4b5563;
+  --accent: #7c3aed;
+  --accent-hover: #8b5cf6;
+  --accent-soft: #c4b5fd;
+  --accent-ink: #ffffff;
+  --danger: #f87171;
+  --danger-bg: #7f1d1d;
+  --ok: #34d399;
+  --warn: #fbbf24;
+
+  /* Imagen de fondo del escritorio. */
+  --wallpaper-blur: 0px;
+  --wallpaper-dim: 0;
 }
 
 html,
@@ -13,18 +60,41 @@ body {
 }
 
 body {
-  @apply bg-gray-950 text-gray-100 font-sans antialiased;
+  @apply bg-canvas text-ink font-sans antialiased;
   user-select: none;
 }
 
 ::selection {
-  background-color: rgb(139 92 246 / 0.35);
+  background-color: color-mix(in oklab, var(--accent) 35%, transparent);
 }
 
-/* Scrollbars discretas, estilo Linear */
+/* Imagen de fondo: capa fija por detrás del contenido, con un velo del color
+   del lienzo para controlar cuánto se ve (--wallpaper-dim). La imagen en sí se
+   pone como estilo en línea desde +page.svelte. */
+.app-wallpaper {
+  position: fixed;
+  inset: -48px;
+  z-index: -1;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: blur(var(--wallpaper-blur));
+  pointer-events: none;
+}
+
+.app-wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--canvas);
+  opacity: var(--wallpaper-dim);
+}
+
+/* Scrollbars discretas, estilo Linear. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(55 65 81 / 0.7) transparent;
+  scrollbar-color: color-mix(in oklab, var(--line-strong) 70%, transparent)
+    transparent;
 }
 
 *::-webkit-scrollbar {
@@ -33,12 +103,12 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgb(55 65 81 / 0.7);
+  background-color: color-mix(in oklab, var(--line-strong) 70%, transparent);
   border-radius: 9999px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(75 85 99 / 0.9);
+  background-color: color-mix(in oklab, var(--ink-faint) 70%, transparent);
 }
 
 *::-webkit-scrollbar-track {

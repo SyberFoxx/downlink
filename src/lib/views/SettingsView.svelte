@@ -5,31 +5,17 @@
     checkYtdlpUpdate,
     detectBrowsers,
     engineInfo,
-    getSettings,
     pickCookiesFile,
     probeUrl,
-    saveSettings,
     updateFfmpeg,
     updateYtdlp,
   } from "$lib/api";
   import EngineUpdateRow from "$lib/components/EngineUpdateRow.svelte";
-  import type {
-    BrowserInfo,
-    CookiesMode,
-    EngineInfo,
-    Settings,
-  } from "$lib/types";
+  import { settings } from "$lib/settings.svelte";
+  import type { BrowserInfo, CookiesMode, EngineInfo } from "$lib/types";
 
   const TEST_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
 
-  let settings = $state<Settings>({
-    cookiesMode: "none",
-    cookiesBrowser: null,
-    cookiesFile: null,
-    concurrency: 2,
-    autoUpdateYtdlp: true,
-    autoDownloadFfmpeg: true,
-  });
   let browsers = $state<BrowserInfo[]>([]);
   let engine = $state<EngineInfo | null>(null);
   let loaded = $state(false);
@@ -58,16 +44,15 @@
   ];
 
   onMount(async () => {
-    const [loadedSettings, detected, info] = await Promise.all([
-      getSettings(),
+    const [detected, info] = await Promise.all([
       detectBrowsers(),
       engineInfo(),
     ]);
-    settings = loadedSettings;
     browsers = detected;
     engine = info;
-    if (!settings.cookiesBrowser && detected.length > 0) {
-      settings.cookiesBrowser = detected[0].id;
+    await settings.load();
+    if (!settings.value.cookiesBrowser && detected.length > 0) {
+      settings.value.cookiesBrowser = detected[0].id;
     }
     loaded = true;
   });
@@ -84,7 +69,7 @@
     saving = true;
     saved = false;
     try {
-      await saveSettings(settings);
+      await settings.save();
       saved = true;
       setTimeout(() => (saved = false), 2500);
     } finally {
@@ -94,14 +79,14 @@
 
   async function chooseFile() {
     const file = await pickCookiesFile();
-    if (file) settings.cookiesFile = file;
+    if (file) settings.value.cookiesFile = file;
   }
 
   async function testConnection() {
     testing = true;
     testResult = null;
     try {
-      await saveSettings(settings);
+      await settings.save();
       const info = await probeUrl(TEST_URL);
       testResult = {
         ok: true,
@@ -118,25 +103,25 @@
   }
 
   let browserMissing = $derived(
-    settings.cookiesMode === "browser" && browsers.length === 0,
+    settings.value.cookiesMode === "browser" && browsers.length === 0,
   );
   let fileMissing = $derived(
-    settings.cookiesMode === "file" && !settings.cookiesFile,
+    settings.value.cookiesMode === "file" && !settings.value.cookiesFile,
   );
 </script>
 
 <div class="mx-auto max-w-2xl px-10 py-12">
   <header class="mb-8">
-    <h1 class="text-lg font-semibold tracking-tight text-gray-100">Ajustes</h1>
-    <p class="mt-1 text-sm text-gray-500">
+    <h1 class="text-lg font-semibold tracking-tight text-ink">Ajustes</h1>
+    <p class="mt-1 text-sm text-ink-muted">
       Configuración del motor de descargas
     </p>
   </header>
 
   <!-- Cookies -->
   <section class="mb-8">
-    <h2 class="mb-1 text-sm font-medium text-gray-300">Cookies</h2>
-    <p class="mb-4 text-xs text-gray-500">
+    <h2 class="mb-1 text-sm font-medium text-ink-strong">Cookies</h2>
+    <p class="mb-4 text-xs text-ink-muted">
       YouTube exige verificación anti-bot cada vez más seguido. Con las cookies de tu
       navegador (sesión iniciada) las descargas funcionan de forma confiable.
     </p>
@@ -144,67 +129,67 @@
     <div class="space-y-2">
       {#each modes as mode (mode.id)}
         <label
-          class="flex cursor-pointer items-start gap-3 rounded-lg border px-3.5 py-2.5 transition-colors {settings.cookiesMode ===
+          class="flex cursor-pointer items-start gap-3 rounded-lg border px-3.5 py-2.5 transition-colors {settings.value.cookiesMode ===
           mode.id
-            ? 'border-violet-600/60 bg-violet-600/5'
-            : 'border-gray-800 bg-gray-900/30 hover:border-gray-700'}"
+            ? 'border-accent/60 bg-accent/5'
+            : 'border-line bg-surface/30 hover:border-line-strong'}"
         >
           <input
             type="radio"
             name="cookies-mode"
             value={mode.id}
-            bind:group={settings.cookiesMode}
-            class="mt-0.5 size-3.5 accent-violet-600"
+            bind:group={settings.value.cookiesMode}
+            class="mt-0.5 size-3.5 accent-accent"
           />
           <span class="min-w-0">
-            <span class="block text-sm text-gray-200">{mode.label}</span>
-            <span class="block text-xs text-gray-500">{mode.description}</span>
+            <span class="block text-sm text-ink">{mode.label}</span>
+            <span class="block text-xs text-ink-muted">{mode.description}</span>
           </span>
         </label>
       {/each}
     </div>
 
-    {#if settings.cookiesMode === "browser"}
+    {#if settings.value.cookiesMode === "browser"}
       <div class="mt-3">
         {#if browserMissing}
-          <p class="text-xs text-amber-400">
+          <p class="text-xs text-warn">
             No se detectó ningún navegador con perfil en este equipo.
           </p>
         {:else}
-          <span class="mb-1 block text-xs text-gray-500">Navegador</span>
+          <span class="mb-1 block text-xs text-ink-muted">Navegador</span>
           <select
-            bind:value={settings.cookiesBrowser}
+            bind:value={settings.value.cookiesBrowser}
             aria-label="Navegador del que extraer cookies"
-            class="w-full rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-600"
+            class="w-full rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
           >
             {#each browsers as browser (browser.id)}
               <option value={browser.id}>{browser.label}</option>
             {/each}
           </select>
-          <p class="mt-1.5 text-[11px] text-gray-600">
+          <p class="mt-1.5 text-[11px] text-ink-faint">
             Debe estar iniciada la sesión en YouTube. Si falla, cierra el navegador e
             intenta de nuevo.
           </p>
         {/if}
       </div>
-    {:else if settings.cookiesMode === "file"}
+    {:else if settings.value.cookiesMode === "file"}
       <div class="mt-3">
         <div class="flex gap-2">
           <input
             type="text"
-            bind:value={settings.cookiesFile}
+            bind:value={settings.value.cookiesFile}
             placeholder="/ruta/a/cookies.txt"
-            class="min-w-0 flex-1 rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2 text-sm text-gray-100 outline-none placeholder:text-gray-600 focus:border-violet-600"
+            class="min-w-0 flex-1 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
           />
           <button
-            class="rounded-lg border border-gray-800 px-3 text-sm text-gray-300 transition-colors hover:bg-gray-900"
+            class="rounded-lg border border-line px-3 text-sm text-ink-strong transition-colors hover:bg-surface"
             onclick={chooseFile}
           >
             Elegir…
           </button>
         </div>
         {#if fileMissing}
-          <p class="mt-1.5 text-[11px] text-amber-400">
+          <p class="mt-1.5 text-[11px] text-warn">
             Selecciona un archivo cookies.txt
           </p>
         {/if}
@@ -214,19 +199,19 @@
 
   <!-- Motor -->
   <section class="mb-8">
-    <h2 class="mb-1 text-sm font-medium text-gray-300">Motor</h2>
+    <h2 class="mb-1 text-sm font-medium text-ink-strong">Motor</h2>
     <div
-      class="rounded-lg border border-gray-800 bg-gray-900/30 px-3.5 py-3 text-sm"
+      class="rounded-lg border border-line bg-surface/30 px-3.5 py-3 text-sm"
     >
       <div class="flex items-center justify-between py-0.5">
-        <span class="text-gray-500">yt-dlp</span>
+        <span class="text-ink-muted">yt-dlp</span>
         <span class="flex items-center gap-2">
-          <span class="font-mono text-xs text-gray-300">
+          <span class="font-mono text-xs text-ink-strong">
             {engine?.ytdlpVersion ?? "no encontrado"}
           </span>
           {#if engine?.ytdlpSource}
             <span
-              class="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-400"
+              class="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-ink-soft"
               title={engine.ytdlpPath ?? undefined}
             >
               {engine.ytdlpSource}
@@ -235,27 +220,27 @@
         </span>
       </div>
       <div class="flex items-center justify-between py-0.5">
-        <span class="text-gray-500">Runtime JS (desafíos YouTube)</span>
+        <span class="text-ink-muted">Runtime JS (desafíos YouTube)</span>
         {#if engine?.jsRuntime}
-          <span class="font-mono text-xs text-emerald-400">
+          <span class="font-mono text-xs text-ok">
             {engine.jsRuntime} ✓
           </span>
         {:else}
-          <span class="text-xs text-amber-400">
+          <span class="text-xs text-warn">
             no detectado — instala node o deno
           </span>
         {/if}
       </div>
       <div class="flex items-center justify-between py-0.5">
-        <span class="text-gray-500">ffmpeg (conversión y audio)</span>
+        <span class="text-ink-muted">ffmpeg (conversión y audio)</span>
         {#if engine?.ffmpegVersion}
           <span class="flex items-center gap-2">
-            <span class="font-mono text-xs text-emerald-400">
+            <span class="font-mono text-xs text-ok">
               {engine.ffmpegVersion} ✓
             </span>
             {#if engine.ffmpegSource}
               <span
-                class="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-400"
+                class="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-ink-soft"
                 title={engine.ffmpegPath ?? undefined}
               >
                 {engine.ffmpegSource}
@@ -263,7 +248,7 @@
             {/if}
           </span>
         {:else}
-          <span class="text-xs text-amber-400">
+          <span class="text-xs text-warn">
             no detectado — instálalo para convertir formatos
           </span>
         {/if}
@@ -276,7 +261,7 @@
       name="yt-dlp"
       idleLabel="Buscar actualizaciones de yt-dlp"
       autoLabel="Buscar actualizaciones al iniciar la app"
-      bind:autoChecked={settings.autoUpdateYtdlp}
+      bind:autoChecked={settings.value.autoUpdateYtdlp}
       check={checkYtdlpUpdate}
       update={updateYtdlp}
       onChanged={refreshEngine}
@@ -289,7 +274,7 @@
       missingLabel="No se encontró ffmpeg en el sistema"
       autoLabel="Descargar ffmpeg al iniciar si falta"
       hint="Los builds de ffmpeg pesan ~150 MB. Si ya tienes ffmpeg instalado se respeta el tuyo."
-      bind:autoChecked={settings.autoDownloadFfmpeg}
+      bind:autoChecked={settings.value.autoDownloadFfmpeg}
       check={checkFfmpegUpdate}
       update={updateFfmpeg}
       onChanged={refreshEngine}
@@ -298,36 +283,36 @@
 
   <!-- Cola -->
   <section class="mb-8">
-    <h2 class="mb-1 text-sm font-medium text-gray-300">Cola de descargas</h2>
-    <p class="mb-4 text-xs text-gray-500">
+    <h2 class="mb-1 text-sm font-medium text-ink-strong">Cola de descargas</h2>
+    <p class="mb-4 text-xs text-ink-muted">
       Más descargas simultáneas aprovechan mejor la conexión, pero compiten entre sí
       y con el resto de tus aplicaciones.
     </p>
     <div class="flex items-center gap-3">
       <select
-        bind:value={settings.concurrency}
+        bind:value={settings.value.concurrency}
         aria-label="Descargas simultáneas"
-        class="w-40 rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2 text-sm text-gray-100 outline-none focus:border-violet-600"
+        class="w-40 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
       >
         {#each [1, 2, 3, 4, 6, 8] as n (n)}
           <option value={n}>{n} simultánea{n === 1 ? "" : "s"}</option>
         {/each}
       </select>
     </div>
-    <p class="mt-1.5 text-[11px] text-gray-600">
+    <p class="mt-1.5 text-[11px] text-ink-faint">
       Aplica de inmediato: si subes el número, arrancan los pendientes de la cola.
     </p>
   </section>
 
   <!-- Prueba -->
   <section class="mb-8">
-    <h2 class="mb-1 text-sm font-medium text-gray-300">Probar configuración</h2>
-    <p class="mb-3 text-xs text-gray-500">
+    <h2 class="mb-1 text-sm font-medium text-ink-strong">Probar configuración</h2>
+    <p class="mb-3 text-xs text-ink-muted">
       Analiza un video de prueba en YouTube usando la configuración actual.
     </p>
     <div class="flex items-center gap-3">
       <button
-        class="rounded-md bg-violet-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm shadow-violet-600/30 transition-colors hover:bg-violet-500 disabled:opacity-50"
+        class="rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:opacity-50"
         disabled={testing || !loaded}
         onclick={testConnection}
       >
@@ -335,7 +320,7 @@
       </button>
       {#if testResult}
         <p
-          class="text-xs {testResult.ok ? 'text-emerald-400' : 'text-red-400'}"
+          class="text-xs {testResult.ok ? 'text-ok' : 'text-danger'}"
         >
           {testResult.ok ? "✅" : "❌"}
           {testResult.message}
@@ -347,14 +332,14 @@
   <!-- Guardar -->
   <div class="flex items-center gap-3">
     <button
-      class="rounded-md border border-gray-700 px-4 py-1.5 text-sm text-gray-200 transition-colors hover:bg-gray-900 disabled:opacity-50"
+      class="rounded-md border border-line-strong px-4 py-1.5 text-sm text-ink transition-colors hover:bg-surface disabled:opacity-50"
       disabled={saving || !loaded}
       onclick={save}
     >
       {saving ? "Guardando…" : "Guardar cambios"}
     </button>
     {#if saved}
-      <span class="text-xs text-emerald-400">Guardado ✓</span>
+      <span class="text-xs text-ok">Guardado ✓</span>
     {/if}
   </div>
 </div>

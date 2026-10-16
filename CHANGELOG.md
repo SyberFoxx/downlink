@@ -7,6 +7,28 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-15
+
+### Added
+- **Sistema de temas**: la interfaz pasa a usar *tokens* de diseño (variables CSS) en vez de colores fijos, así que cambiar de tema repinta toda la app sin recompilar
+- **Nueva vista Apariencia** en la barra lateral, con tema, color de acento e imagen de fondo
+- **10 temas incluidos**: Oscuro (el de siempre), Claro, Catppuccin Mocha, Catppuccin Latte, Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine y Solarized Light
+- **Modo automático**: sigue el claro/oscuro del sistema y, si encuentra una paleta de **pywal o wallust**, imita los colores de tu escritorio (pensado para Hyprland y demás escritorios con *ricing*)
+- **Color de acento personalizable**: doce colores sugeridos más un selector libre, aplicable sobre cualquier tema
+- **Imagen de fondo** propia (wallpaper) con control de intensidad y desenfoque, por detrás de los paneles translúcidos
+- Nuevos comandos `read_wallpaper` (devuelve la imagen como `data:` URL, sin abrir el protocolo de assets) y `read_system_palette` (lee `~/.cache/wallust` o `~/.cache/wal`)
+- Nuevo módulo `theme.rs` con la codificación base64, la detección de la paleta del escritorio y 7 tests
+- Nuevos archivos frontend: `themes.ts` (catálogo), `theme.svelte.ts` y `settings.svelte.ts` (estado compartido)
+
+### Changed
+- Los ajustes de Ajustes y Apariencia comparten una única fuente de verdad, así que guardar en una vista ya no pisa la otra
+- Todos los componentes usan ahora utilidades semánticas (`bg-surface`, `text-ink-muted`, `border-line`, `text-accent`…) en lugar de colores de Tailwind concretos
+
+### Notes
+- El tema por defecto sigue siendo el oscuro de siempre; nada cambia si no entras en Apariencia
+- El modo automático depende de que el webview exponga `prefers-color-scheme`; en Linux lo habitual es que siga el tema GTK
+- La imagen de fondo se lee y se sirve como `data:` URL (máximo 16 MB) para que funcione igual en desarrollo y en producción
+
 ## [0.7.1] - 2026-10-15
 
 ### Added

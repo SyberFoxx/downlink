@@ -10,6 +10,7 @@ import type {
   ProbeInfo,
   QueueJob,
   Settings,
+  SystemPalette,
   UpdateCheck,
 } from "./types";
 
@@ -115,4 +116,28 @@ export async function pickCookiesFile(): Promise<string | null> {
     filters: [{ name: "Cookies", extensions: ["txt"] }],
   });
   return typeof selected === "string" ? selected : null;
+}
+
+export async function pickWallpaper(): Promise<string | null> {
+  const selected = await open({
+    multiple: false,
+    title: "Selecciona una imagen de fondo",
+    filters: [
+      {
+        name: "Imágenes",
+        extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp", "avif"],
+      },
+    ],
+  });
+  return typeof selected === "string" ? selected : null;
+}
+
+/** Lee la imagen de fondo y la devuelve como data URL lista para usar en CSS. */
+export function readWallpaper(path: string): Promise<string> {
+  return invoke<string>("read_wallpaper", { path });
+}
+
+/** Paleta del escritorio generada por pywal/wallust, si existe. */
+export function readSystemPalette(): Promise<SystemPalette | null> {
+  return invoke<SystemPalette | null>("read_system_palette");
 }

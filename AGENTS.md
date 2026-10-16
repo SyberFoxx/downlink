@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.7.1**
+- Versión actual: **0.8.0**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -28,7 +28,7 @@ Estado de navegación: **no hay rutas de SvelteKit en uso**. La app cambia de vi
 downlink/
 ├── src/                         # Frontend
 │   ├── routes/
-│   │   ├── +page.svelte         # Layout + switch de vistas (Descargas / Historial / Ajustes)
+│   │   ├── +page.svelte         # Layout + switch de vistas (Descargas / Historial / Apariencia / Ajustes)
 │   │   ├── +layout.svelte
 │   │   └── +layout.ts           # ssr = false, prerender
 │   ├── lib/
@@ -36,6 +36,9 @@ downlink/
 │   │   ├── types.ts             # Tipos compartidos con el backend (camelCase)
 │   │   ├── options.ts           # Presets, formatos, resumen de opciones
 │   │   ├── utils.ts             # Formatos de duración/bytes/velocidad/ETA
+│   │   ├── themes.ts            # Catálogo de temas, tokens y derivación desde pywal/wallust
+│   │   ├── theme.svelte.ts      # Estado reactivo del tema + aplicación al DOM
+│   │   ├── settings.svelte.ts   # Estado reactivo compartido de los ajustes
 │   │   ├── components/
 │   │   │   ├── Sidebar.svelte       # Navegación + versión en el pie
 │   │   │   ├── PreviewCard.svelte   # Metadatos del probe
@@ -46,8 +49,9 @@ downlink/
 │   │   └── views/
 │   │       ├── DownloadsView.svelte # URL, probe, opciones, cola, pegado/arrastre
 │   │       ├── HistoryView.svelte   # Galería del historial, búsqueda, re-descarga
+│   │       ├── AppearanceView.svelte# Tema, acento, imagen de fondo, paleta del escritorio
 │   │       └── SettingsView.svelte  # Cookies, concurrencia, motor, probar conexión
-│   └── app.css                  # Tailwind + base oscura
+│   └── app.css                  # Tailwind, tokens de diseño y capa de fondo
 ├── src-tauri/
 │   ├── src/
 │   │   ├── main.rs              # Entry point
@@ -57,6 +61,7 @@ downlink/
 │   │   ├── updater.rs           # Descarga y auto-update de yt-dlp y ffmpeg (GitHub releases)
 │   │   ├── history.rs           # Historial persistido (history.json), dedupe por enlace
 │   │   ├── settings.rs          # Settings persistidos, detección de navegadores, EngineInfo
+│   │   ├── theme.rs             # Imagen de fondo (data URL) y paleta de pywal/wallust
 │   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
 │   ├── Cargo.toml
 │   └── tauri.conf.json
@@ -114,6 +119,8 @@ Regla de oro: **el frontend nunca habla con yt-dlp/ffmpeg directamente**. Todo p
 | `update_ytdlp` | — | `UpdateCheck` (descarga e instala; progreso por el evento `engine-update`) |
 | `check_ffmpeg_update` | — | `UpdateCheck` (comprueba si falta o está desfasado el ffmpeg gestionado) |
 | `update_ffmpeg` | — | `UpdateCheck` (descarga ffmpeg+ffprobe; progreso por el evento `engine-update`) |
+| `read_wallpaper` | `path` | `String` (la imagen como `data:` URL) |
+| `read_system_palette` | — | `SystemPalette \| null` (paleta de pywal/wallust, si existe) |
 
 ### La cola (`queue.rs`)
 
@@ -249,6 +256,41 @@ solo para **Linux y Windows** (x86_64 y arm64). Se verifica igual que yt-dlp
   cargo test -- --ignored extrae_binarios_reales_de_ffmpeg`.
 
 
+### Temas y apariencia (`themes.ts`, `theme.rs`)
+
+La interfaz **no usa colores de Tailwind directamente**: usa *tokens* semánticos
+(`--canvas`, `--surface`, `--elevated`, `--line`, `--ink`, `--ink-strong`,
+`--ink-soft`, `--ink-muted`, `--ink-faint`, `--accent`, `--accent-hover`,
+`--accent-soft`, `--accent-ink`, `--danger`, `--danger-bg`, `--ok`, `--warn`).
+
+- En `app.css` se registran con `@theme inline { --color-canvas: var(--canvas); … }`,
+  de modo que las utilidades son `bg-canvas`, `text-ink-muted`, `border-line`,
+  `text-accent`, `bg-danger-bg/30`, etc. (las opacidades usan `color-mix`, que ya
+  usaba Tailwind para sus propias `/NN`). El `:root` de `app.css` trae el tema oscuro
+  como valor por defecto para que no haya parpadeo al arrancar.
+- **Al programar usa siempre los tokens**, nunca `gray-*`/`violet-*`/`red-*`… Si
+  necesitas un color nuevo, añade el token en los tres sitios: `themes.ts`
+  (`ThemeTokens` + `TOKEN_VARS`), el `@theme inline` de `app.css` y los 10 temas.
+- `themes.ts` es el **catálogo** (10 temas, cada uno con su `appearance` dark/light y
+  sus tokens). Añadir un tema es añadir un objeto a `THEMES`.
+- `theme.svelte.ts` es el **estado reactivo**: carga los ajustes, sigue el modo
+  claro/oscuro del sistema (`prefers-color-scheme`), lee la paleta del escritorio y
+  aplica los tokens al `<html>` con un `$effect.root`. `themeFromPalette()` deriva un
+  tema completo desde los 16 colores de pywal/wallust.
+- El modo `themeId = "system"` es **automático**: usa `downlink-dark`/`downlink-light`
+  según el sistema y, si hay paleta de pywal/wallust, la adopta. El tema por defecto
+  sigue siendo `downlink-dark`.
+- **Imagen de fondo**: `theme.rs::read_wallpaper` la lee y la devuelve como `data:`
+  URL (tope 16 MB) para no abrir el protocolo de assets de Tauri; el frontend la pinta
+  en `.app-wallpaper` (capa fija `z-index:-1` con `--wallpaper-blur`) y un `::after`
+  usa `--wallpaper-dim` como velo del color del lienzo.
+- **Paleta del escritorio**: `theme.rs::read_system_palette` lee
+  `~/.cache/wallust/colors.json` y luego `~/.cache/wal/colors.json` con un recorrido
+  tolerante del JSON (pywal y wallust no coinciden al 100%).
+- Los ajustes los comparte una **única fuente de verdad** (`settings.svelte.ts`), para
+  que guardar en Ajustes no pise lo de Apariencia ni al revés.
+
+
 ## Convenciones de código
 
 - **Español** en comentarios, docs, textos de UI y mensajes de error. Mensajes claros y accionables (dicen qué hacer, no solo qué falló).
@@ -257,7 +299,7 @@ solo para **Linux y Windows** (x86_64 y arm64). Se verifica igual que yt-dlp
 - Frontend: Svelte 5 con **runes** (`$state`, `$derived`, `$props`, `$bindable`, `$state.snapshot`). No uses stores ni sintaxis de Svelte 4.
 - Al enviar opciones al backend desde estado reactivo usa `$state.snapshot(options)` (los proxies no serializan bien).
 - Commits: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`).
-- Estilo visual: tema oscuro tipo Linear, acento violeta `#8b5cf6` (violet-600).
+- Estilo visual: tokens semánticos (ver «Temas y apariencia»); nunca colores de Tailwind a pelo. Tema por defecto oscuro tipo Linear.
 
 ## Cosas específicas del entorno y del motor
 
@@ -300,7 +342,7 @@ Resumen:
 - **v0.4** ✅ — playlists: detección, listado, selección y encolado.
 - **v0.5** ✅ — historial con galería, búsqueda y re-descarga + persistencia local.
 - **v0.6** ✅ — recorte de clips (`--download-sections`) y subtítulos (descarga e incrustado).
-- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0), descarga de ffmpeg ✅ (v0.7.1); pendiente tema claro, sidecars empaquetados, tray e instaladores.
+- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0), descarga de ffmpeg ✅ (v0.7.1), sistema de temas ✅ (v0.8.0); pendiente sidecars empaquetados, tray e instaladores.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
 ## Al terminar un cambio

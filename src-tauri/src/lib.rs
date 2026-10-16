@@ -2,6 +2,7 @@ mod engine;
 mod history;
 mod queue;
 mod settings;
+mod theme;
 mod updater;
 mod ytdlp;
 
@@ -177,6 +178,18 @@ async fn update_ffmpeg(app: tauri::AppHandle) -> Result<updater::UpdateCheck, St
     updater::update_ffmpeg(&app).await
 }
 
+/// Lee la imagen de fondo y la devuelve como `data:` URL lista para CSS.
+#[tauri::command]
+async fn read_wallpaper(path: String) -> Result<String, String> {
+    theme::read_wallpaper(&path)
+}
+
+/// Paleta del escritorio generada por pywal/wallust, si existe.
+#[tauri::command]
+async fn read_system_palette() -> Option<theme::SystemPalette> {
+    theme::read_system_palette()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(target_os = "linux")]
@@ -225,7 +238,9 @@ pub fn run() {
             check_ytdlp_update,
             update_ytdlp,
             check_ffmpeg_update,
-            update_ffmpeg
+            update_ffmpeg,
+            read_wallpaper,
+            read_system_palette
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

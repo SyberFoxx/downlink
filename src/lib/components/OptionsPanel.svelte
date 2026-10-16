@@ -109,18 +109,18 @@
   }
 </script>
 
-<section class="mt-3 overflow-hidden rounded-xl border border-gray-800 bg-gray-900/30">
+<section class="mt-3 overflow-hidden rounded-xl border border-line bg-surface/30">
   <!-- Pestañas + presets -->
   <div
-    class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-800/70 px-4 py-2.5"
+    class="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 px-4 py-2.5"
   >
-    <div class="flex rounded-lg border border-gray-800 bg-gray-950/60 p-0.5">
+    <div class="flex rounded-lg border border-line bg-canvas/60 p-0.5">
       {#each ["video", "audio"] as const as mode (mode)}
         <button
           class="rounded-md px-3 py-1 text-xs font-medium transition-colors {options.mode ===
           mode
-            ? 'bg-gray-800 text-gray-100'
-            : 'text-gray-500 hover:text-gray-300'}"
+            ? 'bg-elevated text-ink'
+            : 'text-ink-muted hover:text-ink-strong'}"
           onclick={() => {
             options.mode = mode;
             activePreset = null;
@@ -136,8 +136,8 @@
         <button
           class="rounded-full border px-2.5 py-1 text-[11px] transition-colors {activePreset ===
           id
-            ? 'border-violet-600/60 bg-violet-600/10 text-violet-300'
-            : 'border-gray-800 text-gray-400 hover:border-gray-700 hover:text-gray-200'}"
+            ? 'border-accent/60 bg-accent/10 text-accent-soft'
+            : 'border-line text-ink-soft hover:border-line-strong hover:text-ink'}"
           onclick={() => applyPreset(id)}
         >
           {presetLabel(id)}
@@ -150,13 +150,13 @@
   <div class="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4">
     {#if options.mode === "video"}
       <div>
-        <span class="mb-1 block text-[11px] uppercase tracking-wide text-gray-500"
+        <span class="mb-1 block text-[11px] uppercase tracking-wide text-ink-muted"
           >Calidad</span
         >
         <select
           aria-label="Calidad de video"
           bind:value={options.videoHeight}
-          class="w-full rounded-lg border border-gray-800 bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none focus:border-violet-600"
+          class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           <option value={null}>Mejor disponible</option>
           {#each heights as height (height)}
@@ -166,13 +166,13 @@
       </div>
 
       <div>
-        <span class="mb-1 block text-[11px] uppercase tracking-wide text-gray-500"
+        <span class="mb-1 block text-[11px] uppercase tracking-wide text-ink-muted"
           >Contenedor</span
         >
         <select
           aria-label="Contenedor de video"
           bind:value={options.container}
-          class="w-full rounded-lg border border-gray-800 bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none focus:border-violet-600"
+          class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           {#each VIDEO_CONTAINERS as container (container.id)}
             <option value={container.id}>{container.label}</option>
@@ -181,13 +181,13 @@
       </div>
     {:else}
       <div>
-        <span class="mb-1 block text-[11px] uppercase tracking-wide text-gray-500"
+        <span class="mb-1 block text-[11px] uppercase tracking-wide text-ink-muted"
           >Formato</span
         >
         <select
           aria-label="Formato de audio"
           bind:value={options.audioFormat}
-          class="w-full rounded-lg border border-gray-800 bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none focus:border-violet-600"
+          class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           {#each AUDIO_FORMATS as format (format.id)}
             <option value={format.id}>{format.label}</option>
@@ -196,14 +196,14 @@
       </div>
 
       <div>
-        <span class="mb-1 block text-[11px] uppercase tracking-wide text-gray-500"
+        <span class="mb-1 block text-[11px] uppercase tracking-wide text-ink-muted"
           >Calidad</span
         >
         <select
           aria-label="Calidad de audio"
           bind:value={options.audioQuality}
           disabled={!showQuality}
-          class="w-full rounded-lg border border-gray-800 bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none focus:border-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
+          class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-40"
         >
           {#each AUDIO_QUALITIES as quality (quality.id)}
             <option value={quality.id}>{quality.label}</option>
@@ -215,10 +215,10 @@
     <!-- Volumen -->
     <div class="col-span-2">
       <div class="mb-1.5 flex items-baseline justify-between">
-        <span class="text-[11px] uppercase tracking-wide text-gray-500"
+        <span class="text-[11px] uppercase tracking-wide text-ink-muted"
           >Volumen</span
         >
-        <span class="font-mono text-xs text-gray-400">
+        <span class="font-mono text-xs text-ink-soft">
           {options.volumeDb === 0
             ? "original"
             : `${options.volumeDb && options.volumeDb > 0 ? "+" : ""}${options.volumeDb} dB`}
@@ -233,10 +233,10 @@
           aria-label="Ajuste de volumen en decibelios"
           disabled={options.audioFormat === "best" && options.mode === "audio"}
           bind:value={options.volumeDb}
-          class="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-gray-800 accent-violet-600 disabled:cursor-not-allowed disabled:opacity-40"
+          class="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-elevated accent-accent disabled:cursor-not-allowed disabled:opacity-40"
         />
         <button
-          class="shrink-0 rounded-md border border-gray-800 px-2 py-0.5 text-[11px] text-gray-400 transition-colors hover:bg-gray-900 hover:text-gray-200"
+          class="shrink-0 rounded-md border border-line px-2 py-0.5 text-[11px] text-ink-soft transition-colors hover:bg-surface hover:text-ink"
           onclick={() => (options.volumeDb = 0)}
         >
           Reset
@@ -246,42 +246,42 @@
 
     <!-- Interruptores -->
     <div class="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 pt-0.5">
-      <label class="flex cursor-pointer items-center gap-2 text-xs text-gray-400">
+      <label class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
         <input
           type="checkbox"
           bind:checked={options.normalizeAudio}
           disabled={options.audioFormat === "best" && options.mode === "audio"}
-          class="size-3.5 accent-violet-600"
+          class="size-3.5 accent-accent"
         />
         Normalizar volumen
       </label>
-      <label class="flex cursor-pointer items-center gap-2 text-xs text-gray-400">
+      <label class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
         <input
           type="checkbox"
           bind:checked={options.embedMetadata}
-          class="size-3.5 accent-violet-600"
+          class="size-3.5 accent-accent"
         />
         Incrustar metadatos
       </label>
-      <label class="flex cursor-pointer items-center gap-2 text-xs text-gray-400">
+      <label class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
         <input
           type="checkbox"
           bind:checked={options.embedThumbnail}
-          class="size-3.5 accent-violet-600"
+          class="size-3.5 accent-accent"
         />
         Incrustar miniatura
       </label>
     </div>
 
     <!-- Recorte -->
-    <div class="col-span-2 border-t border-gray-800/40 pt-3">
+    <div class="col-span-2 border-t border-line/40 pt-3">
       <div class="mb-1.5 flex items-baseline justify-between">
-        <span class="text-[11px] uppercase tracking-wide text-gray-500"
+        <span class="text-[11px] uppercase tracking-wide text-ink-muted"
           >Recorte</span
         >
         {#if options.clipStart != null || clipStartText || clipEndText}
           <button
-            class="text-[11px] text-gray-500 transition-colors hover:text-gray-300"
+            class="text-[11px] text-ink-muted transition-colors hover:text-ink-strong"
             onclick={() => {
               clipStartText = "";
               clipEndText = "";
@@ -300,11 +300,11 @@
           aria-label="Inicio del recorte"
           bind:value={clipStartText}
           oninput={syncClip}
-          class="w-28 rounded-lg border bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600 focus:border-violet-600 {clipError
-            ? 'border-red-900/60'
-            : 'border-gray-800'}"
+          class="w-28 rounded-lg border bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent {clipError
+            ? 'border-danger-bg/60'
+            : 'border-line'}"
         />
-        <span class="text-xs text-gray-600">→</span>
+        <span class="text-xs text-ink-faint">→</span>
         <input
           type="text"
           inputmode="numeric"
@@ -312,20 +312,20 @@
           aria-label="Fin del recorte"
           bind:value={clipEndText}
           oninput={syncClip}
-          class="w-28 rounded-lg border bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600 focus:border-violet-600 {clipError
-            ? 'border-red-900/60'
-            : 'border-gray-800'}"
+          class="w-28 rounded-lg border bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent {clipError
+            ? 'border-danger-bg/60'
+            : 'border-line'}"
         />
         {#if info.duration}
-          <span class="text-[11px] text-gray-600">
+          <span class="text-[11px] text-ink-faint">
             el vídeo dura {formatDuration(info.duration)}
           </span>
         {/if}
       </div>
       {#if clipError}
-        <p class="mt-1 text-[11px] text-red-400">{clipError}</p>
+        <p class="mt-1 text-[11px] text-danger">{clipError}</p>
       {:else if options.clipStart != null}
-        <p class="mt-1 text-[11px] text-gray-600">
+        <p class="mt-1 text-[11px] text-ink-faint">
           El corte se ajusta al fotograma clave más cercano (puede variar unas
           décimas).
         </p>
@@ -334,15 +334,15 @@
 
     <!-- Subtítulos (solo tiene sentido en vídeo) -->
     {#if options.mode === "video"}
-      <div class="col-span-2 border-t border-gray-800/40 pt-3">
+      <div class="col-span-2 border-t border-line/40 pt-3">
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
           <label
-            class="flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-wide text-gray-500"
+            class="flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-wide text-ink-muted"
           >
             <input
               type="checkbox"
               bind:checked={options.subtitles}
-              class="size-3.5 accent-violet-600"
+              class="size-3.5 accent-accent"
             />
             Subtítulos
           </label>
@@ -352,25 +352,25 @@
               placeholder="idiomas: es,en"
               aria-label="Idiomas de subtítulos"
               bind:value={options.subtitleLangs}
-              class="w-36 rounded-lg border border-gray-800 bg-gray-950/60 px-2.5 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600 focus:border-violet-600"
+              class="w-36 rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
             />
             <label
-              class="flex cursor-pointer items-center gap-2 text-xs text-gray-400"
+              class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft"
             >
               <input
                 type="checkbox"
                 bind:checked={options.subtitleAuto}
-                class="size-3.5 accent-violet-600"
+                class="size-3.5 accent-accent"
               />
               Automáticos
             </label>
             <label
-              class="flex cursor-pointer items-center gap-2 text-xs text-gray-400"
+              class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft"
             >
               <input
                 type="checkbox"
                 bind:checked={options.embedSubtitles}
-                class="size-3.5 accent-violet-600"
+                class="size-3.5 accent-accent"
               />
               Incrustar en el vídeo
             </label>
@@ -380,12 +380,12 @@
     {/if}
 
     {#if reencodes}
-      <p class="col-span-2 text-[11px] text-amber-400/90">
+      <p class="col-span-2 text-[11px] text-warn/90">
         El ajuste de volumen en video requiere re-codificar (más lento y con leve
         pérdida de calidad).
       </p>
     {:else if options.mode === "video" && options.container === "mp4"}
-      <p class="col-span-2 text-[11px] text-gray-600">
+      <p class="col-span-2 text-[11px] text-ink-faint">
         En MP4 se prefiere H.264 + AAC para máxima compatibilidad de reproductores.
       </p>
     {/if}
@@ -393,11 +393,11 @@
 
   <!-- Pie: resumen + descargar -->
   <div
-    class="flex items-center justify-between gap-4 border-t border-gray-800/70 bg-gray-950/40 px-4 py-2.5"
+    class="flex items-center justify-between gap-4 border-t border-line/70 bg-canvas/40 px-4 py-2.5"
   >
-    <span class="truncate text-xs text-gray-500">{summary}</span>
+    <span class="truncate text-xs text-ink-muted">{summary}</span>
     <button
-      class="flex shrink-0 items-center gap-1.5 rounded-md bg-violet-600 px-3.5 py-1.5 text-sm font-medium text-white shadow-sm shadow-violet-600/30 transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
+      class="flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       disabled={starting || disabled}
       onclick={onDownload}
     >

@@ -110,28 +110,28 @@
   }
 </script>
 
-<div class="mt-3 rounded-lg border border-gray-800 bg-gray-900/30 px-3.5 py-3">
+<div class="mt-3 rounded-lg border border-line bg-surface/30 px-3.5 py-3">
   <div class="flex items-center justify-between gap-3">
     <div class="min-w-0">
       {#if updating && progress}
-        <p class="text-sm text-violet-300">{label}</p>
+        <p class="text-sm text-accent-soft">{label}</p>
       {:else if error}
-        <p class="text-sm text-red-400">{error}</p>
+        <p class="text-sm text-danger">{error}</p>
       {:else if info?.updateAvailable && info.current === null && missingLabel}
-        <p class="text-sm text-amber-400">{missingLabel}</p>
+        <p class="text-sm text-warn">{missingLabel}</p>
       {:else if info?.updateAvailable}
-        <p class="text-sm text-amber-400">
+        <p class="text-sm text-warn">
           Nueva versión disponible: {info.latest}
         </p>
       {:else if info}
-        <p class="text-sm text-gray-400">{name} está al día</p>
+        <p class="text-sm text-ink-soft">{name} está al día</p>
       {:else}
-        <p class="text-sm text-gray-400">{idleLabel}</p>
+        <p class="text-sm text-ink-soft">{idleLabel}</p>
       {/if}
     </div>
     <div class="flex shrink-0 gap-2">
       <button
-        class="rounded-md border border-gray-800 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:bg-gray-900 disabled:opacity-50"
+        class="rounded-md border border-line px-3 py-1.5 text-xs text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
         disabled={checking || updating}
         onclick={refresh}
       >
@@ -139,7 +139,7 @@
       </button>
       {#if info?.updateAvailable}
         <button
-          class="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+          class="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:opacity-50"
           disabled={updating}
           onclick={runUpdate}
         >
@@ -156,9 +156,9 @@
   </div>
 
   {#if updating && percent !== null}
-    <div class="mt-2.5 h-1 overflow-hidden rounded-full bg-gray-800">
+    <div class="mt-2.5 h-1 overflow-hidden rounded-full bg-elevated">
       <div
-        class="h-full rounded-full bg-violet-600 transition-[width] duration-200"
+        class="h-full rounded-full bg-accent transition-[width] duration-200"
         style="width: {percent}%"
       ></div>
     </div>
@@ -168,12 +168,12 @@
     <input
       type="checkbox"
       bind:checked={autoChecked}
-      class="size-3.5 accent-violet-600"
+      class="size-3.5 accent-accent"
     />
-    <span class="text-xs text-gray-400">{autoLabel}</span>
+    <span class="text-xs text-ink-soft">{autoLabel}</span>
   </label>
 
   {#if hint}
-    <p class="mt-1.5 text-[11px] text-gray-600">{hint}</p>
+    <p class="mt-1.5 text-[11px] text-ink-faint">{hint}</p>
   {/if}
 </div>

@@ -9,14 +9,15 @@
   const items = [
     { id: "descargas", label: "Descargas" },
     { id: "historial", label: "Historial" },
+    { id: "apariencia", label: "Apariencia" },
     { id: "ajustes", label: "Ajustes" },
   ];
 </script>
 
-<aside class="flex w-56 shrink-0 flex-col border-r border-gray-800/70">
-  <div class="flex h-14 items-center gap-2.5 border-b border-gray-800/70 px-4">
+<aside class="flex w-56 shrink-0 flex-col border-r border-line/70">
+  <div class="flex h-14 items-center gap-2.5 border-b border-line/70 px-4">
     <div
-      class="grid size-6 place-items-center rounded-md bg-violet-600 text-xs font-bold text-white shadow-sm shadow-violet-600/40"
+      class="grid size-6 place-items-center rounded-md bg-accent text-xs font-bold text-accent-ink shadow-sm shadow-accent/40"
     >
       ↓
     </div>
@@ -28,8 +29,8 @@
       <button
         class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors {view ===
         item.id
-          ? 'bg-gray-900 text-gray-100'
-          : 'text-gray-400 hover:bg-gray-900/50 hover:text-gray-200'}"
+          ? 'bg-surface text-ink'
+          : 'text-ink-soft hover:bg-surface/50 hover:text-ink'}"
         onclick={() => onNavigate(item.id)}
       >
         {item.label}
@@ -37,7 +38,7 @@
     {/each}
   </nav>
 
-  <div class="mt-auto px-4 py-3 text-[11px] text-gray-600">
-    v0.7.1-dev · potenciado por yt-dlp
+  <div class="mt-auto px-4 py-3 text-[11px] text-ink-faint">
+    v0.8.0-dev · potenciado por yt-dlp
   </div>
 </aside>

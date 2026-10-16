@@ -25,6 +25,51 @@ fn default_true() -> bool {
     true
 }
 
+fn default_theme_id() -> String {
+    "downlink-dark".to_string()
+}
+
+fn default_wallpaper_opacity() -> f64 {
+    0.35
+}
+
+fn default_wallpaper_blur() -> f64 {
+    12.0
+}
+
+/// Apariencia: tema, acento e imagen de fondo.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThemeSettings {
+    /// Id de un tema del catálogo, o `"system"` para seguir al escritorio.
+    #[serde(default = "default_theme_id")]
+    pub theme_id: String,
+    /// Acento personalizado en hex (`#rrggbb`), o `None` para el del tema.
+    #[serde(default)]
+    pub accent: Option<String>,
+    /// Ruta a la imagen de fondo elegida por el usuario.
+    #[serde(default)]
+    pub wallpaper: Option<String>,
+    /// Cuánto se ve la imagen de fondo (0–1).
+    #[serde(default = "default_wallpaper_opacity")]
+    pub wallpaper_opacity: f64,
+    /// Desenfoque de la imagen de fondo, en píxeles.
+    #[serde(default = "default_wallpaper_blur")]
+    pub wallpaper_blur: f64,
+}
+
+impl Default for ThemeSettings {
+    fn default() -> Self {
+        Self {
+            theme_id: default_theme_id(),
+            accent: None,
+            wallpaper: None,
+            wallpaper_opacity: default_wallpaper_opacity(),
+            wallpaper_blur: default_wallpaper_blur(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -43,6 +88,9 @@ pub struct Settings {
     /// diario, así que actualizar una copia existente queda a mano en Ajustes.
     #[serde(default = "default_true")]
     pub auto_download_ffmpeg: bool,
+    /// Preferencias de apariencia.
+    #[serde(default)]
+    pub theme: ThemeSettings,
 }
 
 impl Default for Settings {
@@ -54,6 +102,7 @@ impl Default for Settings {
             concurrency: DEFAULT_CONCURRENCY,
             auto_update_ytdlp: true,
             auto_download_ffmpeg: true,
+            theme: ThemeSettings::default(),
         }
     }
 }

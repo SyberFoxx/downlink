@@ -89,6 +89,20 @@ export interface HistoryEntry {
 
 export type CookiesMode = "none" | "browser" | "file";
 
+/** Preferencias de apariencia. */
+export interface ThemeSettings {
+  /** Id de un tema del catálogo, o "system" para seguir al escritorio. */
+  themeId: string;
+  /** Acento personalizado en hex, o null para el del tema. */
+  accent: string | null;
+  /** Ruta a la imagen de fondo elegida por el usuario. */
+  wallpaper: string | null;
+  /** Cuánto se ve la imagen de fondo (0–1). */
+  wallpaperOpacity: number;
+  /** Desenfoque de la imagen de fondo, en píxeles. */
+  wallpaperBlur: number;
+}
+
 export interface Settings {
   cookiesMode: CookiesMode;
   cookiesBrowser: string | null;
@@ -98,6 +112,16 @@ export interface Settings {
   autoUpdateYtdlp: boolean;
   /** Descarga ffmpeg al arrancar si no hay ninguno disponible. */
   autoDownloadFfmpeg: boolean;
+  /** Apariencia: tema, acento e imagen de fondo. */
+  theme: ThemeSettings;
+}
+
+/** Paleta exportada por pywal/wallust. */
+export interface SystemPalette {
+  source: string;
+  background: string;
+  foreground: string;
+  colors: string[];
 }
 
 export interface BrowserInfo {

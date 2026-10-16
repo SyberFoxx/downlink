@@ -59,9 +59,9 @@
 <section class="mt-10">
   <div class="mb-3 flex items-baseline justify-between gap-3">
     <div class="flex items-baseline gap-2">
-      <h2 class="text-sm font-medium text-gray-300">Cola de descargas</h2>
+      <h2 class="text-sm font-medium text-ink-strong">Cola de descargas</h2>
       {#if jobs.length > 0}
-        <span class="text-xs text-gray-600">
+        <span class="text-xs text-ink-faint">
           {#if active > 0}
             {active} activa{active === 1 ? "" : "s"}
           {/if}
@@ -75,7 +75,7 @@
 
     {#if finished > 0}
       <button
-        class="shrink-0 rounded-md border border-gray-800 px-2.5 py-1 text-[11px] text-gray-500 transition-colors hover:border-gray-700 hover:text-gray-300"
+        class="shrink-0 rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink-strong"
         onclick={onClearFinished}
       >
         Limpiar completadas
@@ -84,9 +84,9 @@
   </div>
 
   {#if jobs.length === 0}
-    <div class="rounded-xl border border-dashed border-gray-800 px-6 py-10 text-center">
-      <p class="text-sm text-gray-500">Todavía no hay nada en la cola</p>
-      <p class="mt-1 text-xs text-gray-600">
+    <div class="rounded-xl border border-dashed border-line px-6 py-10 text-center">
+      <p class="text-sm text-ink-muted">Todavía no hay nada en la cola</p>
+      <p class="mt-1 text-xs text-ink-faint">
         Pega enlaces con Ctrl+V o arrástralos a la ventana
       </p>
     </div>

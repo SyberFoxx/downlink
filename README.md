@@ -71,7 +71,13 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como *si
 - 🧠 **Desafíos JS resueltos** — detecta el runtime (node/deno) y usa el solver EJS oficial de yt-dlp
 - 🔧 **Estado del motor** — yt-dlp, runtime JS y ffmpeg detectados y probados desde Ajustes
 
-En el [roadmap](#roadmap): tema claro, empaquetado de yt-dlp/ffmpeg, system tray e instaladores.
+### Apariencia
+- 🎨 **Temas** — 10 incluidos (Oscuro, Claro, Catppuccin, Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized…), aplicados al instante
+- 🖌️ **Color de acento** — elige el color de botones, foco y progreso, o deja el del tema
+- 🖼️ **Imagen de fondo** — pon tu wallpaper por detrás de los paneles, con intensidad y desenfoque ajustables
+- 🐧 **Se integra con tu escritorio** — el modo automático sigue el claro/oscuro del sistema y adopta la paleta de **pywal/wallust** (Hyprland y demás *ricing*)
+
+En el [roadmap](#roadmap): empaquetado de yt-dlp/ffmpeg, system tray e instaladores.
 
 ## Tech Stack
 
@@ -145,6 +151,7 @@ downlink/
 │   │   ├── updater.rs    # Descarga y auto-update de yt-dlp y ffmpeg (GitHub releases)
 │   │   ├── history.rs    # Historial persistido (history.json)
 │   │   ├── settings.rs   # Ajustes persistidos y detección de navegadores
+│   │   ├── theme.rs      # Imagen de fondo (data URL) y paleta de pywal/wallust
 │   │   └── ytdlp.rs      # Argumentos, probe y parser de yt-dlp
 │   ├── Cargo.toml
 │   └── tauri.conf.json   # Configuración de ventana, bundle, etc.
@@ -192,7 +199,8 @@ downlink/
 - [x] Detección del origen del motor (sidecar / gestionado / sistema)
 - [x] Descarga y auto-update de **yt-dlp**
 - [x] Descarga de **ffmpeg** (Linux/Windows) si falta, con actualización manual
-- [ ] Tema claro
+- [x] Sistema de temas: claro/oscuro, temas incluidos, acento e imagen de fondo (v0.8)
+- [ ] Empaquetado de yt-dlp/ffmpeg como sidecars
 - [ ] System tray con progreso + notificaciones
 - [ ] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS)
 

@@ -49,9 +49,9 @@
 </script>
 
 <div
-  class="rounded-xl border bg-gray-900/40 px-4 py-3 transition-colors {dragging
-    ? 'border-violet-600/70 opacity-60'
-    : 'border-gray-800'}"
+  class="rounded-xl border bg-surface/40 px-4 py-3 transition-colors {dragging
+    ? 'border-accent/70 opacity-60'
+    : 'border-line'}"
   draggable={reorderable}
   ondragstart={(e) => onDragStart(job.id, e)}
   ondragover={(e) => onDragOver(job.id, e)}
@@ -67,13 +67,13 @@
     <!-- Indicador de estado -->
     {#if status === "queued"}
       {#if reorderable}
-        <span class="shrink-0 cursor-grab text-gray-600 active:cursor-grabbing" title="Arrastra para reordenar">
+        <span class="shrink-0 cursor-grab text-ink-faint active:cursor-grabbing" title="Arrastra para reordenar">
           <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
           </svg>
         </span>
       {:else}
-        <span class="grid size-6 shrink-0 place-items-center text-gray-500">
+        <span class="grid size-6 shrink-0 place-items-center text-ink-muted">
           <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
             <circle cx="12" cy="12" r="9" />
             <path stroke-linecap="round" d="M12 7v5l3 2" />
@@ -81,32 +81,32 @@
         </span>
       {/if}
     {:else if status === "paused"}
-      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-gray-800 text-gray-300">
+      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-elevated text-ink-strong">
         <svg class="size-3" fill="currentColor" viewBox="0 0 24 24">
           <rect x="6" y="5" width="4" height="14" rx="1" />
           <rect x="14" y="5" width="4" height="14" rx="1" />
         </svg>
       </span>
     {:else if status === "done"}
-      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-emerald-400">
+      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-ok/10 text-ok">
         <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
         </svg>
       </span>
     {:else if status === "error"}
-      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-red-500/10 text-red-400">
+      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-danger/10 text-danger">
         <svg class="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
         </svg>
       </span>
     {:else if status === "cancelled"}
-      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-gray-800 text-gray-400">
+      <span class="grid size-6 shrink-0 place-items-center rounded-full bg-elevated text-ink-soft">
         <svg class="size-3" fill="currentColor" viewBox="0 0 24 24">
           <rect x="6" y="6" width="12" height="12" rx="2" />
         </svg>
       </span>
     {:else}
-      <span class="grid size-6 shrink-0 place-items-center text-violet-400">
+      <span class="grid size-6 shrink-0 place-items-center text-accent-soft">
         <svg class="size-4 animate-spin" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" />
           <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v3a5 5 0 0 0-5 5H4z" />
@@ -116,13 +116,13 @@
 
     <!-- Título y estado -->
     <div class="min-w-0 flex-1">
-      <p class="truncate text-sm text-gray-200">{job.title}</p>
-      <p class="mt-0.5 truncate text-[11px] text-gray-600">{subtitle}</p>
+      <p class="truncate text-sm text-ink">{job.title}</p>
+      <p class="mt-0.5 truncate text-[11px] text-ink-faint">{subtitle}</p>
 
       {#if status === "downloading"}
-        <p class="mt-0.5 text-xs text-gray-500">
+        <p class="mt-0.5 text-xs text-ink-muted">
           {#if percent != null}
-            <span class="tabular-nums text-gray-400">{percent.toFixed(1)}%</span>
+            <span class="tabular-nums text-ink-soft">{percent.toFixed(1)}%</span>
             ·
           {/if}
           {formatBytes(job.downloadedBytes)}{#if job.totalBytes}
@@ -130,34 +130,34 @@
           · {formatSpeed(job.speedBps)} · ETA {formatEta(job.etaSecs)}
         </p>
       {:else if status === "processing"}
-        <p class="mt-0.5 text-xs text-gray-500">
+        <p class="mt-0.5 text-xs text-ink-muted">
           Mezclando o convirtiendo el archivo…
         </p>
       {:else if status === "queued"}
-        <p class="mt-0.5 text-xs text-gray-500">{STATUS_LABEL.queued}</p>
+        <p class="mt-0.5 text-xs text-ink-muted">{STATUS_LABEL.queued}</p>
       {:else if status === "paused"}
-        <p class="mt-0.5 text-xs text-gray-500">
+        <p class="mt-0.5 text-xs text-ink-muted">
           En pausa — reanuda desde donde iba
         </p>
       {:else if status === "done" && job.filePath}
-        <p class="mt-0.5 truncate font-mono text-xs text-gray-600">
+        <p class="mt-0.5 truncate font-mono text-xs text-ink-faint">
           {job.filePath}
         </p>
       {:else if status === "error"}
-        <p class="mt-0.5 text-xs text-red-400/90">{job.message ?? "Error desconocido"}</p>
+        <p class="mt-0.5 text-xs text-danger/90">{job.message ?? "Error desconocido"}</p>
       {:else if status === "cancelled"}
-        <p class="mt-0.5 text-xs text-gray-500">Cancelado</p>
+        <p class="mt-0.5 text-xs text-ink-muted">Cancelado</p>
       {/if}
     </div>
 
     <!-- Progreso / acciones -->
     <div class="flex w-44 shrink-0 items-center justify-end gap-1.5">
       {#if showBar}
-        <div class="mr-1 h-1.5 flex-1 overflow-hidden rounded-full bg-gray-800">
+        <div class="mr-1 h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
           <div
             class="h-full rounded-full transition-[width] duration-300 {status === 'processing'
-              ? 'animate-pulse bg-amber-500'
-              : 'bg-violet-500'}"
+              ? 'animate-pulse bg-warn'
+              : 'bg-accent-hover'}"
             style="width: {Math.min(percent ?? 0, 100)}%"
           ></div>
         </div>
@@ -165,7 +165,7 @@
 
       {#if status === "downloading" || status === "processing"}
         <button
-          class="rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-200"
+          class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
           title="Pausar"
           onclick={() => onPause(job.id)}
         >
@@ -177,7 +177,7 @@
 
       {#if status === "paused"}
         <button
-          class="rounded-md p-1 text-emerald-400 transition-colors hover:bg-gray-800"
+          class="rounded-md p-1 text-ok transition-colors hover:bg-elevated"
           title="Reanudar"
           onclick={() => onResume(job.id)}
         >
@@ -189,7 +189,7 @@
 
       {#if status === "done" && job.filePath}
         <button
-          class="rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-200"
+          class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
           title="Mostrar en la carpeta"
           onclick={() => onReveal(job)}
         >
@@ -201,7 +201,7 @@
 
       {#if status !== "done"}
         <button
-          class="rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-800 hover:text-gray-300"
+          class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink-strong"
           title={status === "queued" || status === "paused" ? "Quitar de la cola" : "Cancelar"}
           onclick={() => onCancel(job.id)}
         >
