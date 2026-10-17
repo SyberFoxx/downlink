@@ -10,7 +10,15 @@ use crate::settings::{CookiesMode, EngineInfo, Settings};
 
 const PROGRESS_TEMPLATE: &str = "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s";
 const FILE_TEMPLATE: &str = "after_move:__FILE__%(filepath)s";
-const JS_RUNTIMES: [&str; 4] = ["deno", "node", "bun", "qjs"];
+const JS_RUNTIMES: [(&str, &str); 4] = [
+    ("deno", "deno"),
+    ("node", "node"),
+    ("bun", "bun"),
+    ("quickjs", "qjs"),
+];
+
+/// Nombre del binario del runtime JS gestionado por la app (quickjs).
+const MANAGED_JS_RUNTIME_BIN: &str = "qjs";
 const NORMALIZE_FILTER: &str = "loudnorm=I=-16:TP=-1.5:LRA=11";
 
 /// Tope de elementos al listar una radio/mix de YouTube. Son listas
@@ -22,16 +30,65 @@ pub fn ytdlp_bin() -> PathBuf {
     engine::ytdlp().0
 }
 
-/// Primer runtime JS soportado por yt-dlp disponible en el sistema.
+/// Runtime JS resuelto: nombre legible, valor para `--js-runtimes` y origen.
+pub struct JsRuntime {
+    /// Nombre que yt-dlp reconoce ("node", "quickjs"…), para mostrar en Ajustes.
+    pub name: String,
+    /// Valor de `--js-runtimes`: `runtime` o `runtime:ruta`.
+    pub arg: String,
+    pub source: engine::Source,
+}
+
+/// Resuelve el runtime JS a usar, en este orden:
+///
+/// 1. `DOWNLINK_JS_RUNTIME` (override manual).
+/// 2. Un runtime del `PATH` (deno, node, bun o quickjs).
+/// 3. La copia **gestionada** de quickjs que descarga la app (no está en el
+///    `PATH`, así que se le pasa su ruta a yt-dlp).
+///
 /// Es necesario para resolver los desafíos `n` de YouTube.
-pub fn detect_js_runtime() -> Option<String> {
-    if let Ok(runtime) = std::env::var("DOWNLINK_JS_RUNTIME") {
-        return Some(runtime);
+pub fn resolve_js_runtime() -> Option<JsRuntime> {
+    if let Ok(value) = std::env::var("DOWNLINK_JS_RUNTIME")
+        && !value.trim().is_empty()
+    {
+        let value = value.trim().to_string();
+        let name = value.split(':').next().unwrap_or(&value).to_string();
+        return Some(JsRuntime {
+            name,
+            arg: value,
+            source: engine::Source::Env,
+        });
     }
-    JS_RUNTIMES
-        .into_iter()
-        .find(|runtime| engine::which(runtime).is_some())
-        .map(String::from)
+
+    for (name, bin) in JS_RUNTIMES {
+        if let Some(path) = engine::which(bin) {
+            return Some(JsRuntime {
+                name: name.to_string(),
+                arg: format!("{name}:{}", path.display()),
+                source: engine::Source::System,
+            });
+        }
+    }
+
+    if let Some(path) = managed_js_runtime_path() {
+        return Some(JsRuntime {
+            name: "quickjs".to_string(),
+            arg: format!("quickjs:{}", path.display()),
+            source: engine::Source::Managed,
+        });
+    }
+
+    None
+}
+
+/// Ruta del runtime JS gestionado (quickjs) si ya está descargado.
+pub fn managed_js_runtime_path() -> Option<PathBuf> {
+    engine::managed_path(MANAGED_JS_RUNTIME_BIN).filter(|path| path.is_file())
+}
+
+/// Valor para `--js-runtimes` (runtime o `runtime:ruta`).
+fn js_runtime_arg() -> Option<String> {
+    resolve_js_runtime().map(|runtime| runtime.arg)
 }
 
 fn is_youtube(url: &str) -> bool {
@@ -70,7 +127,7 @@ fn common_args(settings: &Settings, url: &str) -> Vec<String> {
         CookiesMode::None => {}
     }
 
-    if let Some(runtime) = detect_js_runtime() {
+    if let Some(runtime) = js_runtime_arg() {
         args.push("--js-runtimes".into());
         args.push(runtime);
     }
@@ -769,11 +826,15 @@ pub async fn engine_info() -> EngineInfo {
         None => None,
     };
 
+    let js_runtime = resolve_js_runtime();
     EngineInfo {
         ytdlp_version,
         ytdlp_source: ytdlp.as_ref().map(|(_, source)| source.label().to_string()),
         ytdlp_path: ytdlp.as_ref().map(|(path, _)| path.display().to_string()),
-        js_runtime: detect_js_runtime(),
+        js_runtime: js_runtime.as_ref().map(|runtime| runtime.name.clone()),
+        js_runtime_source: js_runtime
+            .as_ref()
+            .map(|runtime| runtime.source.label().to_string()),
         ffmpeg_path: ffmpeg.as_ref().map(|(path, _)| path.display().to_string()),
         ffmpeg_version,
         ffmpeg_source: ffmpeg
@@ -882,6 +943,14 @@ mod tests {
         assert!(is_youtube("https://www.youtube.com/watch?v=x"));
         assert!(is_youtube("https://YOUTU.BE/x"));
         assert!(!is_youtube("https://vimeo.com/1"));
+    }
+
+    /// yt-dlp reconoce el runtime como `quickjs`, pero el binario se llama `qjs`.
+    /// Antes la lista usaba `qjs` como nombre y yt-dlp lo ignoraba.
+    #[test]
+    fn el_runtime_quickjs_usa_el_nombre_que_yt_dlp_reconoce() {
+        assert!(JS_RUNTIMES.contains(&("quickjs", "qjs")));
+        assert_eq!(MANAGED_JS_RUNTIME_BIN, "qjs");
     }
 
     #[test]

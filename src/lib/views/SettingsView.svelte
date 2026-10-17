@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import {
     checkFfmpegUpdate,
+    checkJsRuntimeUpdate,
     checkYtdlpUpdate,
     defaultDownloadDir,
     detectBrowsers,
@@ -11,6 +12,7 @@
     probeUrl,
     trayAvailable,
     updateFfmpeg,
+    updateJsRuntime,
     updateYtdlp,
   } from "$lib/api";
   import EngineUpdateRow from "$lib/components/EngineUpdateRow.svelte";
@@ -258,12 +260,19 @@
       <div class="flex items-center justify-between py-0.5">
         <span class="text-ink-muted">Runtime JS (desafíos YouTube)</span>
         {#if engine?.jsRuntime}
-          <span class="font-mono text-xs text-ok">
-            {engine.jsRuntime} ✓
+          <span class="flex items-center gap-2">
+            <span class="font-mono text-xs text-ok">
+              {engine.jsRuntime} ✓
+            </span>
+            {#if engine.jsRuntimeSource}
+              <span class="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-ink-soft">
+                {engine.jsRuntimeSource}
+              </span>
+            {/if}
           </span>
         {:else}
           <span class="text-xs text-warn">
-            no detectado — instala node o deno
+            no detectado — necesario para YouTube
           </span>
         {/if}
       </div>
@@ -313,6 +322,19 @@
       bind:autoChecked={settings.value.autoDownloadFfmpeg}
       check={checkFfmpegUpdate}
       update={updateFfmpeg}
+      onChanged={refreshEngine}
+    />
+
+    <EngineUpdateRow
+      engine="quickjs"
+      name="runtime JS"
+      idleLabel="Descargar runtime JS (quickjs)"
+      missingLabel="YouTube necesita un runtime JS y no hay ninguno disponible"
+      autoLabel="Descargar el runtime JS al iniciar si falta"
+      hint="Es un binario diminuto (~2,5 MB) para resolver los desafíos de YouTube; evita tener que instalar Node.js. Si ya tienes node, deno o bun, se respeta el tuyo."
+      bind:autoChecked={settings.value.autoDownloadJsRuntime}
+      check={checkJsRuntimeUpdate}
+      update={updateJsRuntime}
       onChanged={refreshEngine}
     />
   </section>

@@ -39,10 +39,17 @@ const YTDLP_DOWNLOAD_BASE: &str = "https://github.com/yt-dlp/yt-dlp/releases/dow
 const FFMPEG_RELEASE_API: &str =
     "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/tags/latest";
 const FFMPEG_DOWNLOAD_BASE: &str = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest";
+/// Runtime JS gestionado (quickjs-ng). yt-dlp lo usa para los desafíos de YouTube.
+const QUICKJS_RELEASE_API: &str = "https://api.github.com/repos/quickjs-ng/quickjs/releases/latest";
+const QUICKJS_DOWNLOAD_BASE: &str = "https://github.com/quickjs-ng/quickjs/releases/download";
 
 /// Nombre del motor tal cual viaja en el evento `engine-update`.
 const ENGINE_YTDLP: &str = "yt-dlp";
 const ENGINE_FFMPEG: &str = "ffmpeg";
+const ENGINE_QUICKJS: &str = "quickjs";
+
+/// Nombre del binario gestionado del runtime JS (yt-dlp lo busca como `qjs`).
+const QUICKJS_BIN: &str = "qjs";
 
 /// GitHub exige un `User-Agent` con la identidad de la aplicación.
 const USER_AGENT: &str = "Downlink (+https://github.com/SyberFoxx/downlink)";
@@ -55,6 +62,7 @@ pub const ENGINE_UPDATE_EVENT: &str = "engine-update";
 /// Evita dos actualizaciones simultáneas del mismo motor.
 static YTDLP_UPDATING: AtomicBool = AtomicBool::new(false);
 static FFMPEG_UPDATING: AtomicBool = AtomicBool::new(false);
+static QUICKJS_UPDATING: AtomicBool = AtomicBool::new(false);
 
 /// Fase del proceso de actualización (para la UI).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -352,11 +360,15 @@ fn is_newer(current: &str, latest: &str) -> bool {
     false
 }
 
+/// Última etiqueta publicada de un repositorio de GitHub.
+async fn latest_tag(client: &Client, api: &str) -> Result<String, String> {
+    let text = fetch_text(client, api).await?;
+    parse_latest_tag(&text).ok_or_else(|| "GitHub no devolvió una versión válida.".to_string())
+}
+
 /// Consulta la última versión publicada de yt-dlp.
 async fn latest_ytdlp_version(client: &Client) -> Result<String, String> {
-    let text = fetch_text(client, YTDLP_RELEASE_API).await?;
-    parse_latest_tag(&text)
-        .ok_or_else(|| "GitHub no devolvió una versión válida de yt-dlp.".to_string())
+    latest_tag(client, YTDLP_RELEASE_API).await
 }
 
 /// Comprueba la versión instalada de yt-dlp frente a la última publicada.
@@ -875,16 +887,203 @@ async fn managed_dir() -> Result<PathBuf, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Runtime JS (quickjs-ng)
+// ---------------------------------------------------------------------------
+
+/// Asset de quickjs-ng para la plataforma actual.
+fn quickjs_asset_for_platform() -> Option<&'static str> {
+    quickjs_asset_for(std::env::consts::OS, std::env::consts::ARCH)
+}
+
+/// Asset de quickjs-ng para un par sistema/arquitectura (función pura).
+///
+/// Solo se ofrecen los binarios sueltos publicados en sus *releases*. No hay
+/// build para Windows arm64, así que esa plataforma queda fuera.
+fn quickjs_asset_for(os: &str, arch: &str) -> Option<&'static str> {
+    match (os, arch) {
+        ("linux", "x86_64") => Some("qjs-linux-x86_64"),
+        ("linux", "x86") => Some("qjs-linux-x86"),
+        ("linux", "aarch64") => Some("qjs-linux-aarch64"),
+        ("linux", "arm") => Some("qjs-linux-armv7"),
+        ("linux", "riscv64") => Some("qjs-linux-riscv64"),
+        ("windows", "x86_64") => Some("qjs-windows-x86_64.exe"),
+        ("windows", "x86") => Some("qjs-windows-x86.exe"),
+        ("macos", "x86_64") => Some("qjs-darwin-x86_64"),
+        ("macos", "aarch64") => Some("qjs-darwin-arm64"),
+        _ => None,
+    }
+}
+
+/// URL de descarga de un asset de quickjs-ng dentro de una release.
+fn quickjs_asset_url(tag: &str, asset: &str) -> String {
+    format!("{QUICKJS_DOWNLOAD_BASE}/{tag}/{asset}")
+}
+
+fn unsupported_quickjs() -> String {
+    format!(
+        "No hay binario de quickjs para {} {}. Usa el node o deno del sistema.",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    )
+}
+
+/// Versión de quickjs. `qjs -v` imprime solo el número; si esa forma no diera
+/// nada (otras variantes), se recurre a `--help`, que incluye la cabecera
+/// «QuickJS-ng version X».
+async fn probe_quickjs(bin: &Path) -> Option<String> {
+    if let Some(raw) = probe_binary(bin, &["-v"]).await {
+        let version = raw.lines().next().unwrap_or_default().trim().to_string();
+        if !version.is_empty() {
+            return Some(version);
+        }
+    }
+
+    let output = engine::command(bin)
+        .arg("--help")
+        .stdin(Stdio::null())
+        .output()
+        .await
+        .ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .find(|line| line.contains("QuickJS"))
+        .map(|line| line.trim().to_string())
+}
+
+/// Versión del quickjs gestionado, si está instalado y arranca.
+async fn managed_quickjs_version() -> Option<String> {
+    let path = crate::ytdlp::managed_js_runtime_path()?;
+    probe_quickjs(&path).await
+}
+
+/// ¿Hay un runtime JS del `PATH` (deno/node/bun/quickjs)?
+fn system_js_runtime_available() -> bool {
+    matches!(
+        crate::ytdlp::resolve_js_runtime().map(|runtime| runtime.source),
+        Some(Source::System)
+    )
+}
+
+/// Comprueba si conviene descargar el runtime JS gestionado (quickjs).
+///
+/// Solo se propone cuando **no hay ningún runtime** disponible: si el sistema ya
+/// trae node/deno/bun/quickjs, se respeta. Con la copia gestionada presente, se
+/// actualiza si quickjs-ng publica una versión más nueva.
+pub async fn check_js_runtime() -> Result<UpdateCheck, String> {
+    let client = client()?;
+    let tag = latest_tag(&client, QUICKJS_RELEASE_API).await?;
+    let current = managed_quickjs_version().await;
+
+    // Un override manual (`DOWNLINK_JS_RUNTIME`) o un runtime del sistema
+    // relevan de la copia gestionada.
+    let update_available =
+        if std::env::var_os("DOWNLINK_JS_RUNTIME").is_some() || system_js_runtime_available() {
+            false
+        } else {
+            match &current {
+                None => true,
+                Some(installed) => is_newer(installed, tag.trim_start_matches('v')),
+            }
+        };
+
+    Ok(UpdateCheck {
+        current,
+        latest: Some(tag),
+        update_available,
+    })
+}
+
+/// Descarga e instala el runtime JS gestionado (quickjs-ng).
+///
+/// quickjs-ng no publica archivo de sumas de control, así que la integridad se
+/// comprueba **ejecutando** el binario descargado (`qjs -v`), igual que hace
+/// yt-dlp con su propia comprobación de arranque.
+pub async fn update_js_runtime(app: &AppHandle) -> Result<UpdateCheck, String> {
+    let _guard = begin_update(&QUICKJS_UPDATING)?;
+    let client = client()?;
+
+    emit_phase(app, ENGINE_QUICKJS, UpdatePhase::Checking, None, None);
+    let tag = latest_tag(&client, QUICKJS_RELEASE_API)
+        .await
+        .inspect_err(|e| {
+            emit_phase(
+                app,
+                ENGINE_QUICKJS,
+                UpdatePhase::Error,
+                None,
+                Some(e.clone()),
+            );
+        })?;
+
+    let asset = quickjs_asset_for_platform().ok_or_else(|| {
+        let message = unsupported_quickjs();
+        emit_phase(
+            app,
+            ENGINE_QUICKJS,
+            UpdatePhase::Error,
+            None,
+            Some(message.clone()),
+        );
+        message
+    })?;
+
+    let dir = managed_dir().await?;
+    let target = engine::managed_path(QUICKJS_BIN)
+        .ok_or_else(|| "No se pudo resolver la ruta del binario gestionado.".to_string())?;
+    let temp = download_temp_path(&dir, "qjs");
+
+    let url = quickjs_asset_url(&tag, asset);
+    if let Err(err) = stream_download(app, ENGINE_QUICKJS, &client, &url, &temp).await {
+        let _ = tokio::fs::remove_file(&temp).await;
+        return fail(app, ENGINE_QUICKJS, &temp, err).await;
+    }
+
+    emit_phase(app, ENGINE_QUICKJS, UpdatePhase::Verifying, None, None);
+    if let Err(err) = make_executable(&temp) {
+        return fail(app, ENGINE_QUICKJS, &temp, err).await;
+    }
+    let Some(installed) = probe_quickjs(&temp).await else {
+        let message = "El quickjs descargado no se pudo ejecutar en esta plataforma.".to_string();
+        return fail(app, ENGINE_QUICKJS, &temp, message).await;
+    };
+
+    emit_phase(app, ENGINE_QUICKJS, UpdatePhase::Installing, None, None);
+    if let Err(err) = tokio::fs::rename(&temp, &target).await {
+        let message = format!("No se pudo instalar el runtime JS (¿está en uso?): {err}");
+        return fail(app, ENGINE_QUICKJS, &temp, message).await;
+    }
+
+    emit_phase(
+        app,
+        ENGINE_QUICKJS,
+        UpdatePhase::Done,
+        None,
+        Some(format!("runtime JS actualizado a {installed}")),
+    );
+
+    Ok(UpdateCheck {
+        current: Some(installed),
+        latest: Some(tag),
+        update_available: false,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Actualización automática al arrancar
 // ---------------------------------------------------------------------------
 
 /// Actualiza los motores al arrancar según los ajustes. Nunca propaga errores:
 /// una actualización fallida no debe impedir usar la app.
 pub async fn auto_update(app: &AppHandle) {
-    let (update_ytdlp_enabled, download_ffmpeg_enabled) = {
+    let (update_ytdlp_enabled, download_ffmpeg_enabled, download_js_runtime_enabled) = {
         let state = app.state::<SettingsState>();
         let settings = state.0.lock().await;
-        (settings.auto_update_ytdlp, settings.auto_download_ffmpeg)
+        (
+            settings.auto_update_ytdlp,
+            settings.auto_download_ffmpeg,
+            settings.auto_download_js_runtime,
+        )
     };
 
     // yt-dlp: se mantiene al día. Si el usuario forzó una ruta, se respeta.
@@ -907,6 +1106,17 @@ pub async fn auto_update(app: &AppHandle) {
         && let Err(err) = update_ffmpeg(app).await
     {
         eprintln!("[downlink] no se pudo descargar ffmpeg: {err}");
+    }
+
+    // Runtime JS: solo si no hay ninguno (quickjs pesa ~2,5 MB). Así YouTube
+    // funciona sin obligar a instalar Node.js a mano. No se refresca solo: si ya
+    // hay un runtime (del sistema o el gestionado), se respeta.
+    if download_js_runtime_enabled
+        && std::env::var_os("DOWNLINK_JS_RUNTIME").is_none()
+        && crate::ytdlp::resolve_js_runtime().is_none()
+        && let Err(err) = update_js_runtime(app).await
+    {
+        eprintln!("[downlink] no se pudo descargar el runtime JS: {err}");
     }
 }
 
@@ -954,6 +1164,44 @@ mod tests {
         );
         // BtbN no publica macOS.
         assert_eq!(ffmpeg_asset_for("macos", "aarch64"), None);
+    }
+
+    #[test]
+    fn hay_asset_de_quickjs_para_plataformas_habituales() {
+        assert_eq!(
+            quickjs_asset_for("linux", "x86_64"),
+            Some("qjs-linux-x86_64")
+        );
+        assert_eq!(
+            quickjs_asset_for("linux", "aarch64"),
+            Some("qjs-linux-aarch64")
+        );
+        assert_eq!(
+            quickjs_asset_for("windows", "x86_64"),
+            Some("qjs-windows-x86_64.exe")
+        );
+        // quickjs-ng usa "arm64" para macOS y no publica Windows arm64.
+        assert_eq!(
+            quickjs_asset_for("macos", "aarch64"),
+            Some("qjs-darwin-arm64")
+        );
+        assert_eq!(quickjs_asset_for("windows", "aarch64"), None);
+        assert_eq!(quickjs_asset_for("solaris", "sparc"), None);
+    }
+
+    #[test]
+    fn el_asset_actual_de_quickjs_es_el_de_esta_plataforma() {
+        // Esta plataforma debe tener quickjs (CI corre en linux y windows x86_64).
+        let asset = quickjs_asset_for_platform().expect("esta plataforma debe tener quickjs");
+        assert!(asset.starts_with("qjs-"));
+    }
+
+    #[test]
+    fn construye_la_url_del_asset_de_quickjs() {
+        assert_eq!(
+            quickjs_asset_url("v0.17.0", "qjs-linux-x86_64"),
+            "https://github.com/quickjs-ng/quickjs/releases/download/v0.17.0/qjs-linux-x86_64"
+        );
     }
 
     #[test]

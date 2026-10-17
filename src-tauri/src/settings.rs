@@ -88,6 +88,13 @@ pub struct Settings {
     /// diario, así que actualizar una copia existente queda a mano en Ajustes.
     #[serde(default = "default_true")]
     pub auto_download_ffmpeg: bool,
+    /// Descarga un runtime JS (quickjs) al arrancar si no hay ninguno.
+    ///
+    /// yt-dlp lo necesita para resolver los desafíos `n` de YouTube. Es un
+    /// binario diminuto (~2,5 MB), así que descargarlo evita tener que instalar
+    /// Node.js a mano.
+    #[serde(default = "default_true")]
+    pub auto_download_js_runtime: bool,
     /// Carpeta de destino de las descargas. `None` = la estándar del sistema.
     #[serde(default)]
     pub download_dir: Option<String>,
@@ -114,6 +121,7 @@ impl Default for Settings {
             concurrency: DEFAULT_CONCURRENCY,
             auto_update_ytdlp: true,
             auto_download_ffmpeg: true,
+            auto_download_js_runtime: true,
             download_dir: None,
             persist_queue: true,
             notify_on_finish: true,
@@ -133,30 +141,200 @@ pub struct BrowserInfo {
 }
 
 /// Navegadores con perfil detectado en este equipo (de donde se pueden extraer cookies).
+///
+/// Los perfiles viven en sitios distintos según el sistema: en Windows bajo
+/// `%LOCALAPPDATA%`/`%APPDATA%`, en macOS bajo `~/Library/Application Support` y
+/// en Linux bajo `$XDG_CONFIG_HOME` (o `~/.config`). Comprobar solo rutas de
+/// Linux dejaba la detección vacía en Windows.
 pub fn detect_browsers() -> Vec<BrowserInfo> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
-    let candidates: [(&str, &str, &str); 7] = [
-        ("firefox", "Firefox", ".mozilla/firefox"),
-        ("brave", "Brave", ".config/BraveSoftware/Brave-Browser"),
-        ("chrome", "Google Chrome", ".config/google-chrome"),
-        ("chromium", "Chromium", ".config/chromium"),
-        ("edge", "Microsoft Edge", ".config/microsoft-edge"),
-        ("vivaldi", "Vivaldi", ".config/vivaldi"),
-        ("opera", "Opera", ".config/opera"),
-    ];
-
-    let Some(home) = home else {
-        return Vec::new();
-    };
-
-    candidates
-        .iter()
-        .filter(|(_, _, relative)| home.join(relative).is_dir())
+    browser_candidates(std::env::consts::OS, &BrowserDirs::from_env())
+        .into_iter()
+        .filter(|(_, _, dir)| dir.is_dir())
         .map(|(id, label, _)| BrowserInfo {
-            id: (*id).to_string(),
-            label: (*label).to_string(),
+            id: id.to_string(),
+            label: label.to_string(),
         })
         .collect()
+}
+
+/// Carpetas base desde las que se resuelven los perfiles de los navegadores.
+#[derive(Debug, Default)]
+struct BrowserDirs {
+    home: Option<PathBuf>,
+    local_app_data: Option<PathBuf>,
+    app_data: Option<PathBuf>,
+    xdg_config: Option<PathBuf>,
+}
+
+impl BrowserDirs {
+    /// Lee las carpetas base del entorno. En Linux, si no hay
+    /// `XDG_CONFIG_HOME`, se usa `~/.config` como manda la especificación.
+    fn from_env() -> Self {
+        let home = env_path("HOME").or_else(|| env_path("USERPROFILE"));
+        let xdg_config =
+            env_path("XDG_CONFIG_HOME").or_else(|| home.as_ref().map(|h| h.join(".config")));
+        Self {
+            home,
+            local_app_data: env_path("LOCALAPPDATA"),
+            app_data: env_path("APPDATA"),
+            xdg_config,
+        }
+    }
+}
+
+/// Lee una variable de entorno como ruta, ignorando las vacías.
+fn env_path(var: &str) -> Option<PathBuf> {
+    std::env::var_os(var)
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+}
+
+/// Carpeta base de un perfil, según la plataforma.
+#[derive(Debug, Clone, Copy)]
+enum Base {
+    Home,
+    LocalAppData,
+    AppData,
+    XdgConfig,
+}
+
+impl Base {
+    fn resolve(self, dirs: &BrowserDirs) -> Option<PathBuf> {
+        match self {
+            Base::Home => dirs.home.clone(),
+            Base::LocalAppData => dirs.local_app_data.clone(),
+            Base::AppData => dirs.app_data.clone(),
+            Base::XdgConfig => dirs.xdg_config.clone(),
+        }
+    }
+}
+
+/// Perfiles de navegador candidatos para una plataforma, como rutas absolutas.
+/// Función pura (recibe las carpetas base) para poder probarla sin depender del
+/// sistema en el que corran los tests.
+fn browser_candidates(os: &str, dirs: &BrowserDirs) -> Vec<(&'static str, &'static str, PathBuf)> {
+    let entries: &[(&'static str, &'static str, Base, &'static str)] = match os {
+        "windows" => &[
+            (
+                "firefox",
+                "Firefox",
+                Base::AppData,
+                r"Mozilla\Firefox\Profiles",
+            ),
+            (
+                "brave",
+                "Brave",
+                Base::LocalAppData,
+                r"BraveSoftware\Brave-Browser\User Data",
+            ),
+            (
+                "chrome",
+                "Google Chrome",
+                Base::LocalAppData,
+                r"Google\Chrome\User Data",
+            ),
+            (
+                "chromium",
+                "Chromium",
+                Base::LocalAppData,
+                r"Chromium\User Data",
+            ),
+            (
+                "edge",
+                "Microsoft Edge",
+                Base::LocalAppData,
+                r"Microsoft\Edge\User Data",
+            ),
+            (
+                "vivaldi",
+                "Vivaldi",
+                Base::LocalAppData,
+                r"Vivaldi\User Data",
+            ),
+            (
+                "opera",
+                "Opera",
+                Base::AppData,
+                r"Opera Software\Opera Stable",
+            ),
+        ],
+        "macos" => &[
+            (
+                "firefox",
+                "Firefox",
+                Base::Home,
+                "Library/Application Support/Firefox",
+            ),
+            (
+                "brave",
+                "Brave",
+                Base::Home,
+                "Library/Application Support/BraveSoftware/Brave-Browser",
+            ),
+            (
+                "chrome",
+                "Google Chrome",
+                Base::Home,
+                "Library/Application Support/Google/Chrome",
+            ),
+            (
+                "chromium",
+                "Chromium",
+                Base::Home,
+                "Library/Application Support/Chromium",
+            ),
+            (
+                "edge",
+                "Microsoft Edge",
+                Base::Home,
+                "Library/Application Support/Microsoft Edge",
+            ),
+            (
+                "vivaldi",
+                "Vivaldi",
+                Base::Home,
+                "Library/Application Support/Vivaldi",
+            ),
+            (
+                "opera",
+                "Opera",
+                Base::Home,
+                "Library/Application Support/com.operasoftware.Opera",
+            ),
+        ],
+        // Linux y demás sistemas tipo Unix.
+        _ => &[
+            ("firefox", "Firefox", Base::Home, ".mozilla/firefox"),
+            (
+                "brave",
+                "Brave",
+                Base::XdgConfig,
+                "BraveSoftware/Brave-Browser",
+            ),
+            ("chrome", "Google Chrome", Base::XdgConfig, "google-chrome"),
+            ("chromium", "Chromium", Base::XdgConfig, "chromium"),
+            ("edge", "Microsoft Edge", Base::XdgConfig, "microsoft-edge"),
+            ("vivaldi", "Vivaldi", Base::XdgConfig, "vivaldi"),
+            ("opera", "Opera", Base::XdgConfig, "opera"),
+        ],
+    };
+
+    entries
+        .iter()
+        .filter_map(|(id, label, base, relative)| {
+            let root = base.resolve(dirs)?;
+            Some((*id, *label, join_components(&root, relative)))
+        })
+        .collect()
+}
+
+/// Une una subruta (con `/` o `\`) a una base con el separador nativo, para que
+/// el resultado sea el mismo en cualquier plataforma.
+fn join_components(root: &std::path::Path, relative: &str) -> PathBuf {
+    relative
+        .split(['/', '\\'])
+        .filter(|part| !part.is_empty())
+        .fold(root.to_path_buf(), |path, part| path.join(part))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -166,6 +344,7 @@ pub struct EngineInfo {
     pub ytdlp_source: Option<String>,
     pub ytdlp_path: Option<String>,
     pub js_runtime: Option<String>,
+    pub js_runtime_source: Option<String>,
     pub ffmpeg_path: Option<String>,
     pub ffmpeg_version: Option<String>,
     pub ffmpeg_source: Option<String>,
@@ -274,5 +453,94 @@ mod tests {
         assert!(settings.persist_queue);
         assert!(settings.notify_on_finish);
         assert!(!settings.close_to_tray);
+        assert!(settings.auto_download_js_runtime);
+    }
+
+    /// Base de prueba portable (los tests corren en cualquier sistema).
+    fn dirs(
+        home: &str,
+        local: Option<&str>,
+        roaming: Option<&str>,
+        xdg: Option<&str>,
+    ) -> BrowserDirs {
+        BrowserDirs {
+            home: Some(PathBuf::from(home)),
+            local_app_data: local.map(PathBuf::from),
+            app_data: roaming.map(PathBuf::from),
+            xdg_config: xdg.map(PathBuf::from),
+        }
+    }
+
+    fn dir_of<'a>(
+        candidates: &'a [(&'static str, &'static str, PathBuf)],
+        id: &str,
+    ) -> &'a PathBuf {
+        &candidates
+            .iter()
+            .find(|(browser, _, _)| *browser == id)
+            .expect("el navegador debería estar en la lista")
+            .2
+    }
+
+    #[test]
+    fn en_windows_los_perfiles_estan_bajo_appdata() {
+        let dirs = dirs(
+            "C:/Users/ana",
+            Some("C:/Users/ana/AppData/Local"),
+            Some("C:/Users/ana/AppData/Roaming"),
+            None,
+        );
+        let candidates = browser_candidates("windows", &dirs);
+        assert_eq!(candidates.len(), 7);
+        assert_eq!(
+            dir_of(&candidates, "brave"),
+            &PathBuf::from("C:/Users/ana/AppData/Local")
+                .join("BraveSoftware")
+                .join("Brave-Browser")
+                .join("User Data")
+        );
+        assert_eq!(
+            dir_of(&candidates, "firefox"),
+            &PathBuf::from("C:/Users/ana/AppData/Roaming")
+                .join("Mozilla")
+                .join("Firefox")
+                .join("Profiles")
+        );
+    }
+
+    #[test]
+    fn en_linux_los_perfiles_estan_bajo_xdg_config() {
+        let dirs = dirs("/home/ana", None, None, Some("/home/ana/.config"));
+        let candidates = browser_candidates("linux", &dirs);
+        assert_eq!(
+            dir_of(&candidates, "brave"),
+            &PathBuf::from("/home/ana/.config")
+                .join("BraveSoftware")
+                .join("Brave-Browser")
+        );
+        assert_eq!(
+            dir_of(&candidates, "firefox"),
+            &PathBuf::from("/home/ana").join(".mozilla").join("firefox")
+        );
+    }
+
+    #[test]
+    fn en_macos_los_perfiles_estan_bajo_library() {
+        let dirs = dirs("/Users/ana", None, None, None);
+        let candidates = browser_candidates("macos", &dirs);
+        assert_eq!(
+            dir_of(&candidates, "chrome"),
+            &PathBuf::from("/Users/ana")
+                .join("Library")
+                .join("Application Support")
+                .join("Google")
+                .join("Chrome")
+        );
+    }
+
+    #[test]
+    fn sin_carpetas_base_no_hay_candidatos() {
+        let candidates = browser_candidates("windows", &BrowserDirs::default());
+        assert!(candidates.is_empty());
     }
 }

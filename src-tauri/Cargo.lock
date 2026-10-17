@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "downlink"
-version = "0.10.1"
+version = "0.10.2"
 dependencies = [
  "lzma-rs",
  "reqwest 0.12.28",
