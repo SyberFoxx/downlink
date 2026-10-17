@@ -74,6 +74,8 @@ downlink/
 │   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
 │   ├── Cargo.toml
 │   └── tauri.conf.json
+├── docs/
+│   └── android-v1.md            # Plan del port a Android (bloqueantes, fases)
 └── .github/workflows/
     ├── ci.yml                   # CI: frontend + Rust (ubuntu + windows)
     └── release.yml              # Release: instaladores (deb/rpm/AppImage + MSI/NSIS)
@@ -468,6 +470,10 @@ Verifica el CI con: `gh run watch <run-id> --exit-status`.
 
 Ver `README.md` → sección Roadmap (fuente de verdad del plan) y `CHANGELOG.md` (lo ya entregado).
 
+El plan del port a Android vive en **`docs/android-v1.md`**: bloqueantes (ejecutar
+el motor con W^X, almacenamiento SAF, scaffold inexistente), lo que hay que
+adaptar (UI táctil, bandeja, cookies, pywal) y las fases de trabajo.
+
 Resumen:
 - **v0.1 / v0.1.1** ✅ — cimientos, cookies del navegador, EJS, vista Ajustes.
 - **v0.2** ✅ — selector de formatos, contenedores, formatos de audio, volumen/normalización, presets.
@@ -479,7 +485,7 @@ Resumen:
 - **v0.8** ✅ — sistema de temas (tokens, 10 temas, acento, fondo, paleta de pywal/wallust).
 - **v0.9** ✅ — carpeta configurable, SponsorBlock, cola persistente, notificaciones, bandeja, reintentar, toasts, pegado global y marca propia.
 - **v0.10** ✅ — instaladores deb/rpm/AppImage y MSI/NSIS publicados en GitHub Releases por el workflow `release.yml`.
-- **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
+- **v1.0** — Android (arm64): primero la UI móvil (fase A), luego scaffold + motor nativo (ver `docs/android-v1.md`).
 
 ## Al terminar un cambio
 
