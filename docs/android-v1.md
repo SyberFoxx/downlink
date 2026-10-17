@@ -107,7 +107,7 @@ Medido sobre el código actual:
 | Objetivos táctiles | 14× `size-3.5` (14 px), 9× `size-4`, `p-1` (4 px) | Mínimo recomendado: 44×44 px |
 | Alto de pantalla `src/routes/+page.svelte:138` (`h-screen`) | `100vh` | No encaja con las barras dinámicas de Android → hay que usar `100dvh` |
 | Safe areas | 0 usos de `env(safe-area-inset-*)` | Contenido bajo el notch y la barra de gestos |
-| `hover` | **61** usos de `hover:`, **1** de `active:` | Al tocar, el hover se queda pegado |
+| `hover` | 61 usos de `hover:`, **1** de `active:` | Tailwind v4 los envuelve en `@media (hover: hover)`, así que **en táctil no se aplican**; falta feedback de pulsación (`active:`) |
 | Drag & drop HTML5 | `src/lib/components/QueueList.svelte:39-72`, `src/lib/components/DownloadRow.svelte:57-65` | Reordenar con el dedo no funciona |
 | Pegado | `Ctrl+V` en `src/routes/+page.svelte:95-107` | No existe: hace falta share intent |
 | Fondo con desenfoque | `src/app.css:101-110` | Caro en GPU móvil (opcional) |
@@ -184,15 +184,26 @@ Ya hay gating `cfg(desktop)`, pero hay que rematar el caso móvil:
 Objetivo: que la app **se vea bien** en una pantalla de móvil, verificable en el
 navegador a 390 px sin necesidad de dispositivo ni toolchain.
 
-- [ ] Breakpoint de móvil (~768 px) sin alterar la disposición de escritorio.
-- [ ] Barra lateral → **navegación inferior** en móvil (misma lista de vistas).
-- [ ] `100dvh` en vez de `100vh` y `env(safe-area-inset-*)` en los bordes.
-- [ ] Objetivos táctiles ≥ 44 px en botones e iconos de acción.
-- [ ] `hover:` → `active:`/`:focus-visible` en los controles táctiles.
+El breakpoint elegido es el `md` de Tailwind (768 px), que cae justo por debajo
+del ancho mínimo que la ventana de escritorio ya respeta (`tauri.conf.json:18`),
+así que la disposición de escritorio no se toca. Las medidas de abajo salen de un
+navegador real a 390×844.
+
+- [x] Breakpoint de móvil (768 px) sin alterar la disposición de escritorio
+      (escritorio: 224 px de barra / 1056 px de contenido, idéntico a antes).
+- [x] Barra lateral → **navegación inferior** (390×65, en fila y pegada abajo).
+- [x] `100dvh` en vez de `100vh` y `env(safe-area-inset-*)` arriba y abajo.
+- [x] Tipografía base a 17 px en móvil (todo lo que mide en `rem` escala).
+- [x] Desactivar en móvil el fondo con desenfoque.
+- [x] Objetivos táctiles de la navegación a 51 px de alto (era 32 px).
+- [ ] Objetivos táctiles ≥ 44 px en el resto de botones e iconos: hoy el más
+      pequeño mide 26 px. Pendiente.
+- [ ] Feedback de pulsación (`active:`) en los controles, ahora que los `hover:`
+      quedan fuera del táctil solos.
 - [ ] Reordenar la cola con **gestos** (Pointer Events) en vez de HTML5 drag & drop.
-- [ ] Ajustar tipografía base para pantalla pequeña.
-- [ ] Desactivar en móvil el fondo con desenfoque (o reducir su coste).
-- [ ] `user-select: none` revisado para que se pueda copiar texto.
+- [ ] `user-select: none` revisado para que se pueda copiar texto (hoy se puede
+      seleccionar solo dentro de campos de formulario, `app.css:64`).
+- [ ] Pegado por *share intent* en vez de `Ctrl+V`.
 
 ### Fase B — Andamiaje Android
 
@@ -235,8 +246,11 @@ navegador a 390 px sin necesidad de dispositivo ni toolchain.
 
 1. **`color-mix` y WebView antiguo**: hay **82** usos de opacidad tipo
    `bg-surface/30`, que Tailwind compila a `color-mix(in oklab, …)` (necesita
-   WebView **111+**, 2023). En un WebView viejo, esos fondos y bordes
-   desaparecerían. Hay que fijar una versión mínima de WebView o dar respaldo.
+   WebView **111+**, 2023). Mitigado: Tailwind emite además un respaldo dentro de
+   `@supports (color: color-mix(in lab, red, red))`, así que en un WebView sin
+   soporte el color se aplica **a plena opacidad** en vez de desaparecer. Se
+   degrada el matiz, no se rompe la interfaz. Aun así conviene fijar una versión
+   mínima de WebView.
 2. **libc**: los binarios de Android usan Bionic, no glibc. Conseguir/compilar
    yt-dlp y ffmpeg para arm64 Android es la parte con más incógnitas.
 3. **Peso del APK**: yt-dlp + ffmpeg + runtime JS por arquitectura.
@@ -244,10 +258,19 @@ navegador a 390 px sin necesidad de dispositivo ni toolchain.
 
 ## 6. Cómo probar sin dispositivo
 
-```bash
-npm run dev     # Vite solo, sin shell nativo (los invoke() fallarán)
-```
+La ventana de Tauri no sirve para esto porque tiene `minWidth: 940`
+(`src-tauri/tauri.conf.json:18`). Hay dos caminos:
 
-En Chrome → DevTools → modo dispositivo → **390×844**: ahí se ve exactamente la
-disposición actual a tamaño de móvil. La ventana de Tauri no sirve para esto
-porque tiene `minWidth: 940` (`src-tauri/tauri.conf.json:18`).
+1. **A ojo**, en el navegador: `npm run dev` y DevTools → modo dispositivo →
+   **390×844**.
+2. **Con medidas** (lo que se usó para verificar la fase A): la app se pinta en el
+   cliente y sin las APIs de Tauri **no se dibuja nada** (no es un problema de
+   CSS: revienta en `onMount` al no existir `window.__TAURI_INTERNALS__`), así que
+   hace falta un *stub* de Tauri y un reportero que mida la geometría real
+   (`getBoundingClientRect`, tamaños de los objetivos táctiles, desbordamiento
+   horizontal) y la envíe a un servidor local. Con eso se comprueba el layout con
+   números en vez de "a ojo", que es como se midieron las cifras de la fase A.
+
+Datos clave a 390×844 después de la fase A: `main` a 390 px de ancho (antes 166),
+barra inferior de 390×65 con botones de 91×51 (antes 207×32 dentro de una barra
+lateral de 224 px), tipografía raíz 17 px y sin desbordamiento horizontal.
