@@ -146,3 +146,25 @@ input,
 textarea {
   user-select: text;
 }
+
+/* ---------------------------------------------------------------------------
+   Móvil. Por debajo del breakpoint `md` de Tailwind (48rem = 768px) la app
+   pasa de leerse "a lo ancho" a leerse "a lo alto": la barra lateral se
+   convierte en navegación inferior (ver Sidebar.svelte) y aquí van los ajustes
+   globales de esa franja.
+   --------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  /* En una pantalla de 6" los tamaños de escritorio se quedan cortos. Como
+     Tailwind mide tipografía y espaciados en `rem`, subir la base escala todo
+     de golpe (y de paso agranda un poco los objetivos táctiles). */
+  :root {
+    font-size: 17px;
+  }
+
+  /* El desenfoque a pantalla completa es caro en GPU móvil y con una pantalla
+     pequeña apenas se aprecia: se desactiva y la capa vuelve a su sitio. */
+  .app-wallpaper {
+    inset: 0;
+    filter: none;
+  }
+}

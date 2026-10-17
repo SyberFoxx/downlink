@@ -42,24 +42,32 @@
   ];
 </script>
 
-<aside class="flex w-56 shrink-0 flex-col border-r border-line/70">
-  <div class="flex h-14 items-center gap-2.5 border-b border-line/70 px-4">
+<aside
+  class="flex w-56 shrink-0 flex-col border-r border-line/70 max-md:order-last max-md:w-full max-md:flex-row max-md:border-t max-md:border-r-0 max-md:border-line/70 max-md:bg-surface/70 max-md:pb-[env(safe-area-inset-bottom)]"
+>
+  <div
+    class="flex h-14 items-center gap-2.5 border-b border-line/70 px-4 max-md:hidden"
+  >
     <Logo size={26} />
     <span class="text-[15px] font-semibold tracking-tight">Downlink</span>
   </div>
 
-  <nav class="mt-3 space-y-0.5 px-2">
+  <nav
+    class="mt-3 space-y-0.5 px-2 max-md:mt-0 max-md:flex max-md:flex-1 max-md:gap-1 max-md:space-y-0 max-md:px-1.5 max-md:py-1.5"
+  >
     {#each items as item (item.id)}
       <button
-        class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors {view ===
+        class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors max-md:min-h-11 max-md:w-auto max-md:flex-1 max-md:flex-col max-md:justify-center max-md:gap-1 max-md:rounded-xl max-md:px-1 max-md:py-1 max-md:text-xs {view ===
         item.id
-          ? 'bg-surface text-ink'
-          : 'text-ink-soft hover:bg-surface/50 hover:text-ink'}"
+          ? 'bg-surface text-ink max-md:bg-accent/10 max-md:text-accent-soft'
+          : 'text-ink-soft md:hover:bg-surface/50 md:hover:text-ink max-md:active:bg-surface/50'}"
         aria-current={view === item.id ? "page" : undefined}
         onclick={() => onNavigate(item.id)}
       >
         <svg
-          class="size-4 shrink-0 {view === item.id ? 'text-accent-soft' : 'text-ink-muted'}"
+          class="size-4 shrink-0 max-md:size-5 {view === item.id
+            ? 'text-accent-soft max-md:text-accent'
+            : 'text-ink-muted'}"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -75,7 +83,9 @@
     {/each}
   </nav>
 
-  <div class="mt-auto px-4 py-3 text-[11px] text-ink-faint">
+  <div
+    class="mt-auto px-4 py-3 text-[11px] text-ink-faint max-md:hidden"
+  >
     v0.10.0-dev · potenciado por yt-dlp
   </div>
 </aside>

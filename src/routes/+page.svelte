@@ -135,9 +135,12 @@
     : "none"}
 ></div>
 
-<div class="flex h-screen overflow-hidden">
+<div class="flex h-dvh overflow-hidden max-md:flex-col">
   <Sidebar {view} onNavigate={(v) => (view = v)} />
-  <main bind:this={mainEl} class="flex-1 overflow-y-auto">
+  <main
+    bind:this={mainEl}
+    class="min-h-0 flex-1 overflow-y-auto max-md:pt-[env(safe-area-inset-top)]"
+  >
     {#key view}
       <div in:fly={viewTransition}>
         {#if view === "ajustes"}
