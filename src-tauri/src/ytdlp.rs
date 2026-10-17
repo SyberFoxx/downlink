@@ -489,6 +489,9 @@ pub struct ProbeInfo {
 pub(crate) fn friendly_error(stderr: &str) -> String {
     let raw = last_error_line(stderr).unwrap_or_else(|| "La operación falló.".to_string());
     let lower = raw.to_lowercase();
+    // La detección mira todo el stderr: si yt-dlp termina con un traceback, la
+    // última línea no siempre es el mensaje de error.
+    let all = stderr.to_lowercase();
 
     if lower.contains("sign in to confirm") || lower.contains("page needs to be reloaded") {
         return format!(
@@ -500,9 +503,20 @@ pub(crate) fn friendly_error(stderr: &str) -> String {
             "No se pudieron resolver los desafíos JS de YouTube. Instala Node.js o Deno, o revisa tu conexión.\n\nDetalle: {raw}"
         );
     }
-    if lower.contains("could not copy") || lower.contains("failed to decrypt") {
+    // En Windows, el navegador bloquea su base de cookies mientras está abierto
+    // y yt-dlp no puede copiarla (yt-dlp#7271). Es el error más común al usar
+    // «cookies desde el navegador» y siempre se ve en Windows.
+    if all.contains("could not copy") {
         return format!(
-            "No se pudieron leer las cookies del navegador. Cierra el navegador e intenta de nuevo, o usa un archivo cookies.txt.\n\nDetalle: {raw}"
+            "No se pudieron leer las cookies porque el navegador tiene bloqueado su archivo de cookies (habitual en Windows, mientras el navegador está abierto).\n\
+             Cierra el navegador por completo —también de la bandeja y de segundo plano— y vuelve a probar.\n\
+             Alternativa: exporta las cookies a un archivo cookies.txt y usa «Cookies → Desde archivo».\n\n\
+             Detalle: {raw}"
+        );
+    }
+    if all.contains("failed to decrypt") {
+        return format!(
+            "El navegador cifró sus cookies y no se pudieron descifrar. Exporta las cookies a un archivo cookies.txt y usa «Cookies → Desde archivo».\n\nDetalle: {raw}"
         );
     }
     raw
@@ -1012,6 +1026,43 @@ mod tests {
         );
         assert!(msg.contains("Ajustes"));
         assert!(msg.contains("Sign in to confirm"));
+    }
+
+    /// En Windows el navegador bloquea su base de cookies y yt-dlp no puede
+    /// copiarla (yt-dlp#7271). El mensaje debe decir qué hacer.
+    #[test]
+    fn error_de_cookies_bloqueadas_explica_que_cierre_el_navegador() {
+        let stderr = "Extracting cookies from brave\n\
+                      [debug] Extracting cookies from: \"C:\\Users\\x\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\Default\\Network\\Cookies\"\n\
+                      ERROR: Could not copy Chrome cookie database. See https://github.com/yt-dlp/yt-dlp/issues/7271";
+        let msg = friendly_error(stderr);
+        assert!(msg.contains("Cierra el navegador por completo"), "{msg}");
+        assert!(msg.contains("cookies.txt"), "{msg}");
+        assert!(msg.contains("Detalle:"), "{msg}");
+        assert!(
+            msg.contains("Could not copy Chrome cookie database"),
+            "{msg}"
+        );
+    }
+
+    /// La detección mira todo el stderr, no solo la última línea: con pip o
+    /// verbose, yt-dlp puede terminar en un traceback.
+    #[test]
+    fn error_de_cookies_bloqueadas_se_detecta_tambien_con_traceback() {
+        let stderr = "ERROR: Could not copy Chrome cookie database. See https://github.com/yt-dlp/yt-dlp/issues/7271\n\
+                      Traceback (most recent call last):\n\
+                      File \"yt_dlp\\cookies.py\", line 365, in _extract_chrome_cookies\n\
+                      raise DownloadError(message)  # force exit";
+        let msg = friendly_error(stderr);
+        assert!(msg.contains("Cierra el navegador por completo"), "{msg}");
+    }
+
+    /// Cookies cifradas por el navegador: otro problema distinto (no es bloqueo).
+    #[test]
+    fn error_de_cookies_sin_descifrar_sugiere_cookies_txt() {
+        let msg = friendly_error("ERROR: [youtube] x: failed to decrypt chrome cookies");
+        assert!(msg.contains("cookies.txt"), "{msg}");
+        assert!(msg.contains("descifrar"), "{msg}");
     }
 
     #[test]
