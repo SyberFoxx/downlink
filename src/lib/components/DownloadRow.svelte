@@ -146,7 +146,9 @@
           {job.filePath}
         </p>
       {:else if status === "error"}
-        <p class="mt-0.5 text-xs text-danger/90">{job.message ?? "Error desconocido"}</p>
+        <p
+          class="mt-0.5 whitespace-pre-wrap text-xs text-danger/90"
+        >{job.message ?? "Error desconocido"}</p>
       {:else if status === "cancelled"}
         <p class="mt-0.5 text-xs text-ink-muted">Cancelado</p>
       {/if}

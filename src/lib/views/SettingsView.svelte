@@ -470,7 +470,9 @@
       </button>
       {#if testResult}
         <p
-          class="text-xs {testResult.ok ? 'text-ok' : 'text-danger'}"
+          class="max-w-2xl whitespace-pre-wrap text-xs {testResult.ok
+            ? 'text-ok'
+            : 'text-danger'}"
           role="status"
         >
           {testResult.ok ? "✅" : "❌"}

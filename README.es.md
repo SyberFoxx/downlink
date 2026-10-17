@@ -156,6 +156,16 @@ YouTube bloquea por IP cuando hay muchas peticiones o la sesión no es válida. 
 2. Pulsa **Probar conexión** para verificar.
 3. Si sigue fallando, cierra el navegador (para que su base de cookies no esté bloqueada) e inténtalo de nuevo.
 
+**«Could not copy Chrome cookie database» (Windows)**
+
+Windows **bloquea la base de cookies del navegador** mientras está abierto, así que yt-dlp no puede leerla — en Linux suele funcionar incluso con el navegador abierto, porque los bloqueos de Linux son solo de cortesía. Dice «Chrome» aunque uses Brave o Edge: es la palabra que trae yt-dlp, no un error tuyo.
+
+1. Cierra el navegador por completo: sácalo de la bandeja y comprueba en el Administrador de tareas que no queden procesos `brave.exe`/`chrome.exe`.
+2. Pulsa **Probar conexión** otra vez.
+3. Si sigue fallando, exporta las cookies a un archivo `.txt` (p. ej. con *Get cookies.txt LOCALLY*) y cambia **Ajustes → Cookies → Desde archivo**.
+
+Detalles: [yt-dlp#7271](https://github.com/yt-dlp/yt-dlp/issues/7271).
+
 **«n challenge solving failed»**
 
 Falta un runtime JS. Downlink lo descarga solo en la primera ejecución; si no ocurre, ve a **Ajustes → Motor → runtime JS** y pulsa **Descargar**. También puedes instalar `node` o `deno` tú mismo si lo prefieres.
