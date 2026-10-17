@@ -4,6 +4,7 @@
   import {
     AUDIO_FORMATS,
     AUDIO_QUALITIES,
+    MAX_MP4_HEIGHT,
     SPONSORBLOCK_CATEGORIES,
     VIDEO_CONTAINERS,
     PRESETS,
@@ -94,6 +95,17 @@
     options.mode === "video" && (options.volumeDb !== 0 || options.normalizeAudio),
   );
   let summary = $derived(summarizeOptions(options));
+
+  /** MP4 tops out at 1080p (H.264): above that it would lose resolution. */
+  let mp4Blocked = $derived(
+    options.mode === "video" &&
+      (options.videoHeight == null || options.videoHeight > MAX_MP4_HEIGHT),
+  );
+
+  // Keep the container honest: picking 1440p/4K switches MP4 over to MKV.
+  $effect(() => {
+    if (mp4Blocked && options.container === "mp4") options.container = "mkv";
+  });
 
   function applyPreset(id: PresetId) {
     const height = id === "video-1080" ? resolution1080 : null;
@@ -189,7 +201,9 @@
           class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           {#each VIDEO_CONTAINERS as container (container.id)}
-            <option value={container.id}>{container.label}</option>
+            <option value={container.id} disabled={container.id === "mp4" && mp4Blocked}>
+              {container.label}
+            </option>
           {/each}
         </select>
       </div>
@@ -455,6 +469,12 @@
       <p class="col-span-2 text-[11px] text-warn/90">
         El ajuste de volumen en video requiere re-codificar (más lento y con leve
         pérdida de calidad).
+      </p>
+    {:else if mp4Blocked}
+      <p class="col-span-2 text-[11px] text-ink-faint">
+        MP4 no pasa de 1080p sin perder calidad: en {options.videoHeight
+          ? `${options.videoHeight}p`
+          : "resolución máxima"} se descarga en MKV y se conserva el códec original.
       </p>
     {:else if options.mode === "video" && options.container === "mp4"}
       <p class="col-span-2 text-[11px] text-ink-faint">
