@@ -314,6 +314,7 @@ downlink/
 - [x] Official `.deb`, `.rpm`, AppImage, `.msi` and NSIS installers, published to GitHub Releases
 - [x] Fix for `ffmpeg` and `node` not starting inside the AppImage (v0.10.1)
 - [x] Windows fixes: browser detection, no CMD windows and automatic JS runtime (v0.10.2)
+- [x] Engine download progress visible from any view, and a cookies guide per browser in the docs (v0.10.3)
 
 ### v1.0 — Android 📱
 - [ ] Port to Tauri 2 mobile (arm64)
