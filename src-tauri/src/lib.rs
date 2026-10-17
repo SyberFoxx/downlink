@@ -220,6 +220,19 @@ async fn update_ffmpeg(app: tauri::AppHandle) -> Result<updater::UpdateCheck, St
     updater::update_ffmpeg(&app).await
 }
 
+/// Comprueba si conviene descargar el runtime JS gestionado (quickjs).
+#[tauri::command]
+async fn check_js_runtime_update() -> Result<updater::UpdateCheck, String> {
+    updater::check_js_runtime().await
+}
+
+/// Descarga e instala el runtime JS (quickjs). El progreso llega por el evento
+/// `engine-update`.
+#[tauri::command]
+async fn update_js_runtime(app: tauri::AppHandle) -> Result<updater::UpdateCheck, String> {
+    updater::update_js_runtime(&app).await
+}
+
 /// Lee la imagen de fondo y la devuelve como `data:` URL lista para CSS.
 #[tauri::command]
 async fn read_wallpaper(path: String) -> Result<String, String> {
@@ -332,6 +345,8 @@ pub fn run() {
             update_ytdlp,
             check_ffmpeg_update,
             update_ffmpeg,
+            check_js_runtime_update,
+            update_js_runtime,
             read_wallpaper,
             read_system_palette,
             default_download_dir,

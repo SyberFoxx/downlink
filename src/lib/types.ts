@@ -124,6 +124,8 @@ export interface Settings {
   autoUpdateYtdlp: boolean;
   /** Descarga ffmpeg al arrancar si no hay ninguno disponible. */
   autoDownloadFfmpeg: boolean;
+  /** Descarga un runtime JS (quickjs) al arrancar si no hay ninguno. */
+  autoDownloadJsRuntime: boolean;
   /** Carpeta de destino de las descargas (null = la del sistema). */
   downloadDir: string | null;
   /** Reanuda las descargas pendientes al abrir la app. */
@@ -154,6 +156,7 @@ export interface EngineInfo {
   ytdlpSource: string | null;
   ytdlpPath: string | null;
   jsRuntime: string | null;
+  jsRuntimeSource: string | null;
   ffmpegPath: string | null;
   ffmpegVersion: string | null;
   ffmpegSource: string | null;

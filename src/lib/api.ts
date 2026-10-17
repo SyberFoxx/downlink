@@ -106,6 +106,14 @@ export function updateFfmpeg(): Promise<UpdateCheck> {
   return invoke<UpdateCheck>("update_ffmpeg");
 }
 
+export function checkJsRuntimeUpdate(): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>("check_js_runtime_update");
+}
+
+export function updateJsRuntime(): Promise<UpdateCheck> {
+  return invoke<UpdateCheck>("update_js_runtime");
+}
+
 export function onEngineUpdate(
   callback: (progress: EngineUpdateProgress) => void,
 ): Promise<() => void> {

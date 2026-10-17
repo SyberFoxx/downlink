@@ -91,13 +91,34 @@ pub fn which(bin: &str) -> Option<PathBuf> {
     })
 }
 
-/// Crea un `Command` para un binario externo (yt-dlp, ffmpeg…) con el entorno
-/// de la AppImage saneado. Ver [`sanitize_env`].
+/// Crea un `Command` para un binario externo (yt-dlp, ffmpeg, node…) con el
+/// entorno de la AppImage saneado ([`sanitize_env`]) y sin ventana de consola en
+/// Windows ([`hide_console`]).
+///
+/// Es el **único** punto por el que deben lanzarse procesos externos.
 pub fn command(bin: impl AsRef<OsStr>) -> Command {
     let mut cmd = Command::new(bin);
     sanitize_env(&mut cmd);
+    hide_console(&mut cmd);
     cmd
 }
+
+/// Evita que Windows abra una ventana de consola al lanzar un ejecutable de
+/// consola (`yt-dlp.exe`, `ffmpeg.exe`, `qjs.exe`…) desde la app, que es
+/// gráfica.
+///
+/// Sin la bandera `CREATE_NO_WINDOW` cada invocación hace parpadear (o deja
+/// abierta) una ventana de CMD, lo que resulta alarmante para el usuario. Como
+/// todos los procesos pasan por [`command`], aquí queda cubierto todo.
+#[cfg(windows)]
+fn hide_console(cmd: &mut Command) {
+    /// No crear consola para el proceso hijo.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn hide_console(_cmd: &mut Command) {}
 
 /// Quita del entorno del proceso hijo las bibliotecas que inyecta la AppImage.
 ///

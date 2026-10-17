@@ -7,6 +7,16 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-10-17
+
+### Added
+- **Runtime JS propio (quickjs)**: si el equipo no tiene node, deno ni bun, Downlink descarga solo un runtime diminuto (~2,5 MB) para que yt-dlp resuelva los desafíos de YouTube. Ya no hay que instalar Node.js a mano; en Ajustes hay una fila para descargarlo o actualizarlo, con su casilla para hacerlo al arrancar si falta
+
+### Fixed
+- **Windows: no se detectaban los navegadores** (Brave, Chrome, Edge…). La detección solo miraba rutas de Linux, así que la lista salía vacía aunque el navegador estuviera instalado. Ahora usa las rutas de cada sistema (`%LOCALAPPDATA%`, `%APPDATA%`, `~/Library`…) y también cubre macOS
+- **Windows: se abrían ventanas de CMD** al usar la app. Cada vez que Downlink lanzaba yt-dlp o ffmpeg, Windows creaba una consola nueva; ahora todos los procesos externos arrancan sin ventana (`CREATE_NO_WINDOW`)
+- El runtime JS **quickjs se anunciaba con el nombre equivocado** (`qjs`), así que yt-dlp lo ignoraba aunque estuviera instalado; ahora se pasa como `quickjs` con la ruta del binario
+
 ## [0.10.1] - 2026-10-17
 
 ### Fixed

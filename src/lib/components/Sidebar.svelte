@@ -86,6 +86,6 @@
   <div
     class="mt-auto px-4 py-3 text-[11px] text-ink-faint max-md:hidden"
   >
-    v0.10.1-dev · potenciado por yt-dlp
+    v0.10.2-dev · potenciado por yt-dlp
   </div>
 </aside>
