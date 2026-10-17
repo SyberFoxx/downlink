@@ -204,6 +204,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn quita_las_rutas_de_la_appimage_y_conserva_el_resto() {
         let appdir = Path::new("/tmp/.mount_Downli123");
         let value = OsStr::new("/tmp/.mount_Downli123/usr/lib:/opt/mis-libs:/usr/lib64");
@@ -212,18 +213,20 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn sin_rutas_propias_la_variable_desaparece() {
         let appdir = Path::new("/tmp/.mount_Downli123");
         let value = OsStr::new("/tmp/.mount_Downli123/usr/lib:/tmp/.mount_Downli123/lib64");
         assert_eq!(strip_paths_inside(value, appdir), None);
     }
 
+    /// Vale en cualquier plataforma: una ruta suelta que no cae dentro de la
+    /// AppImage se conserva tal cual.
     #[test]
-    fn no_toca_rutas_ajenas() {
-        let appdir = Path::new("/tmp/.mount_Downli123");
-        let value = OsStr::new("/usr/lib:/usr/lib64");
+    fn conserva_una_ruta_ajena_a_la_appimage() {
+        let value = OsStr::new("/usr/lib");
         assert_eq!(
-            strip_paths_inside(value, appdir),
+            strip_paths_inside(value, Path::new("/tmp/.mount_Downli123")),
             Some(value.to_os_string())
         );
     }
