@@ -457,9 +457,12 @@ Verifica el CI con: `gh run watch <run-id> --exit-status`.
   instala además `libfuse2` y `patchelf` (necesarios para el AppImage). Los
   binarios se suben como artefactos.
 - Job **release** (solo con tag, `permissions: contents: write`): junta los
-  artefactos con `download-artifact` y crea la release con
-  `gh release create <tag> dist/*` (o `gh release upload --clobber` si la
-  release ya existe).
+  artefactos con `download-artifact` y crea la release subiendo los ficheros
+  (`gh release create <tag> "${assets[@]}"`, con los nombres sacados de
+  `find dist -type f`; o `gh release upload --clobber` si la release ya existe).
+  **Ojo**: los artefactos llegan con la subcarpeta de cada plataforma
+  (`dist/deb/…`, `dist/rpm/…`, `dist/msi/…`), así que `dist/*` expande a
+  directorios y `gh` falla con «read dist/rpm: is a directory».
 
 ## Estado y roadmap
 
