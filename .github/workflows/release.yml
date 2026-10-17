@@ -90,8 +90,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${{ github.ref_name }}"
+          # Los artefactos llegan con su subcarpeta (deb/, rpm/, msi/…), así que
+          # hay que subir los ficheros, no los directorios.
+          mapfile -t assets < <(find dist -type f | sort)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No se encontró ningún instalador en dist/" >&2
+            exit 1
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" dist/* --clobber
+            gh release upload "$tag" "${assets[@]}" --clobber
           else
-            gh release create "$tag" dist/* --generate-notes --title "Downlink $tag"
+            gh release create "$tag" "${assets[@]}" --generate-notes --title "Downlink $tag"
           fi
