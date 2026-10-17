@@ -29,7 +29,6 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 
 use crate::engine::{self, Source};
 use crate::settings::SettingsState;
@@ -246,7 +245,7 @@ fn checksum_for(sums: &str, asset: &str) -> Option<String> {
 
 /// Ejecuta `bin <arg>` y devuelve `None` si no arranca o no imprime nada.
 async fn probe_binary(bin: &Path, args: &[&str]) -> Option<String> {
-    let output = Command::new(bin)
+    let output = engine::command(bin)
         .args(args)
         .stdin(Stdio::null())
         .output()
@@ -538,9 +537,12 @@ fn date_from_timestamp(timestamp: &str) -> Option<u32> {
 /// ¿Hay que (re)instalar ffmpeg?
 ///
 /// - Si no aparece ningún ffmpeg, sí (descarga).
+/// - Si el que hay **no se puede ejecutar** (bibliotecas incompatibles, binario
+///   roto…), también: un ffmpeg que no arranca no sirve para nada y la app
+///   quedaría sin conversión ni postprocesado.
 /// - Si el que hay es la copia gestionada, solo si el build remoto es más nuevo
 ///   (o si el instalado no reporta una fecha reconocible, para poder reinstalar).
-/// - Si es del sistema (o forzado por variable de entorno), se respeta y no se toca.
+/// - Si es del sistema (o forzado por variable de entorno) y funciona, se respeta.
 fn ffmpeg_update_available(
     source: Option<Source>,
     installed_version: Option<&str>,
@@ -548,6 +550,7 @@ fn ffmpeg_update_available(
 ) -> bool {
     match source {
         None => true,
+        Some(_) if installed_version.is_none() => true,
         Some(Source::Managed) => {
             match (
                 installed_version.and_then(build_date_from_version),
@@ -1043,6 +1046,13 @@ mod tests {
         assert!(!ffmpeg_update_available(
             Some(Source::System),
             Some("6.1.1"),
+            Some("2026-10-15T00:00:00Z"),
+        ));
+        // ffmpeg del sistema que no arranca (no reporta versión): se ofrece
+        // la copia gestionada, porque ese binario no sirve.
+        assert!(ffmpeg_update_available(
+            Some(Source::System),
+            None,
             Some("2026-10-15T00:00:00Z"),
         ));
     }
