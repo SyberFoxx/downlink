@@ -146,6 +146,38 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
 
 To **use** the app you don't need to install `yt-dlp`, `ffmpeg` or a JS runtime: Downlink downloads its own copies if they're missing.
 
+## Cookies
+
+Some sites — YouTube above all — only hand you the good formats when you are logged in, so Downlink can borrow your browser's session. Choose a mode in **Settings → Cookies**:
+
+| Mode | What it does | Use it when |
+| --- | --- | --- |
+| **From browser** | Reads the session straight from the installed browser | Firefox (any OS), or Chrome/Brave/Edge with the browser closed |
+| **From file** | Loads a `cookies.txt` you export yourself | Windows with a Chromium browser, or whenever *From browser* fails |
+| **Disabled** | No cookies at all | Public videos without restrictions |
+
+### Per browser
+
+- **Firefox** — *From browser*, always the easy path. Firefox does not lock its cookie database, so it works even with the browser open.
+- **Chrome, Brave, Edge, Chromium, Vivaldi or Opera on Windows** — Windows locks the cookie database while the browser runs, so *From browser* fails with *«Could not copy Chrome cookie database»* ([yt-dlp#7271](https://github.com/yt-dlp/yt-dlp/issues/7271)). Either close the browser completely (tray + Task Manager) or use a `cookies.txt` (see below).
+- **The same Chromium browsers on Linux and macOS** — *From browser* normally works even with the browser open: locks on Linux are only advisory.
+- **Safari and anything else** — Downlink does not detect it, so use a `cookies.txt`.
+
+### Exporting a cookies.txt
+
+Works with any browser, and it is the alternative to everything above.
+
+1. Install an extension that exports cookies in the Netscape format: [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) for Chrome/Brave/Edge, or *Cookie-Editor* for Firefox.
+2. Open the site while logged in (e.g. <https://www.youtube.com>), click the extension and choose **Export**.
+3. Save the file somewhere safe, then in Downlink go to **Settings → Cookies → From file** and pick it.
+4. Press **Test connection**: you should get the list of formats instead of the anti-bot message.
+
+Three things worth knowing:
+
+- The file **is your session**: don't share it, and delete it when you stop needing it.
+- Cookies expire: if the anti-bot message comes back, export a fresh file.
+- Downlink only hands the file to the local yt-dlp process (`--cookies`); the app neither stores nor uploads it.
+
 ## Troubleshooting
 
 **“Sign in to confirm you're not a bot”**
@@ -156,13 +188,15 @@ YouTube blocks by IP when there are too many requests or the session isn't valid
 2. Hit **Test connection** to verify.
 3. If it still fails, close the browser (so its cookie database isn't locked) and try again.
 
+Step by step for each browser: see [Cookies](#cookies).
+
 **“Could not copy Chrome cookie database” (Windows)**
 
 Windows locks the browser's cookie database while the browser is open, so yt-dlp can't read it — on Linux this usually works even with the browser running, because Linux locks are only advisory. The message says “Chrome” even for Brave or Edge; that's yt-dlp's wording, not yours.
 
 1. Close the browser completely: quit it from the system tray and check Task Manager for lingering `brave.exe`/`chrome.exe` processes.
 2. Hit **Test connection** again.
-3. If it still fails, export your cookies to a `.txt` file (e.g. with *Get cookies.txt LOCALLY*) and switch **Settings → Cookies → From file**.
+3. If it still fails, export your cookies to a `.txt` file (e.g. with *Get cookies.txt LOCALLY*) and switch **Settings → Cookies → From file** — the full guide is in [Cookies](#cookies).
 
 Details: [yt-dlp#7271](https://github.com/yt-dlp/yt-dlp/issues/7271).
 
