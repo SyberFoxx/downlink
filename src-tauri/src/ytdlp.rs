@@ -3,7 +3,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tokio::process::{Child, ChildStderr, ChildStdout, Command};
+use tokio::process::{Child, ChildStderr, ChildStdout};
 
 use crate::engine;
 use crate::settings::{CookiesMode, EngineInfo, Settings};
@@ -458,7 +458,7 @@ pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> 
 
     let output = tokio::time::timeout(
         Duration::from_secs(120),
-        Command::new(ytdlp_bin())
+        engine::command(ytdlp_bin())
             .args(&args)
             .stdin(Stdio::null())
             .output(),
@@ -727,7 +727,7 @@ pub fn spawn_process(
 ) -> Result<(Child, ChildStdout, ChildStderr), String> {
     let args = build_download_args(settings, url, options);
 
-    let mut child = Command::new(ytdlp_bin())
+    let mut child = engine::command(ytdlp_bin())
         .args(&args)
         .current_dir(out_dir)
         .stdin(Stdio::null())
@@ -784,7 +784,7 @@ pub async fn engine_info() -> EngineInfo {
 
 /// Ejecuta un binario con un argumento de versión y devuelve su salida limpia.
 async fn version_of(path: &Path, arg: &str) -> Option<String> {
-    Command::new(path)
+    engine::command(path)
         .arg(arg)
         .stdin(Stdio::null())
         .output()
@@ -801,7 +801,7 @@ pub async fn ffmpeg_version() -> Option<String> {
 }
 
 async fn ffmpeg_version_of(path: &Path) -> Option<String> {
-    let output = Command::new(path)
+    let output = engine::command(path)
         .arg("-version")
         .stdin(Stdio::null())
         .output()

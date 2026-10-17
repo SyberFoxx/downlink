@@ -12,10 +12,12 @@
 //! `yt-dlp` nunca puede quedar sin resolver: si no se encuentra, se devuelve el
 //! nombre pelado para que falle con un mensaje claro al ejecutarlo.
 
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use tauri::{AppHandle, Manager};
+use tokio::process::Command;
 
 /// Carpeta de binarios gestionados por la app. Se fija una sola vez al arrancar.
 static MANAGED_BIN_DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -89,6 +91,61 @@ pub fn which(bin: &str) -> Option<PathBuf> {
     })
 }
 
+/// Crea un `Command` para un binario externo (yt-dlp, ffmpeg…) con el entorno
+/// de la AppImage saneado. Ver [`sanitize_env`].
+pub fn command(bin: impl AsRef<OsStr>) -> Command {
+    let mut cmd = Command::new(bin);
+    sanitize_env(&mut cmd);
+    cmd
+}
+
+/// Quita del entorno del proceso hijo las bibliotecas que inyecta la AppImage.
+///
+/// La AppImage exporta `LD_LIBRARY_PATH=$APPDIR/usr/lib:…` y empaqueta sus
+/// propias `libcrypto.so.3`, `libssh.so.4`, `libcurl-gnutls.so.4`… Los binarios
+/// del **sistema** (`ffmpeg`, `node`) heredan esa variable y cargan esos `.so`
+/// en vez de los suyos, de modo que **no arrancan**:
+///
+/// ```text
+/// /usr/bin/ffmpeg: …/usr/lib/libssh.so.4: version `LIBSSH_4_10_0' not found
+/// node: …/usr/lib/libcrypto.so.3: version `OPENSSL_3.4.0' not found
+/// ```
+///
+/// Las consecuencias visibles eran: «Postprocessing: ffmpeg not found» al
+/// descargar y, sin `node`, yt-dlp no podía resolver los desafíos JS de YouTube
+/// (error que apunta a las cookies). Fuera de una AppImage (`APPDIR` sin
+/// definir) esta función no hace nada.
+pub fn sanitize_env(cmd: &mut Command) {
+    let Some(appdir) = std::env::var_os("APPDIR").map(PathBuf::from) else {
+        return;
+    };
+    for var in ["LD_LIBRARY_PATH", "LD_PRELOAD"] {
+        let Some(value) = std::env::var_os(var) else {
+            continue;
+        };
+        match strip_paths_inside(&value, &appdir) {
+            Some(clean) => {
+                cmd.env(var, clean);
+            }
+            None => {
+                cmd.env_remove(var);
+            }
+        }
+    }
+}
+
+/// Devuelve `value` sin las entradas de ruta que caen dentro de `dir`.
+/// `None` si no queda ninguna (hay que quitar la variable entera).
+fn strip_paths_inside(value: &OsStr, dir: &Path) -> Option<OsString> {
+    let kept: Vec<PathBuf> = std::env::split_paths(value)
+        .filter(|entry| !entry.starts_with(dir))
+        .collect();
+    if kept.is_empty() {
+        return None;
+    }
+    std::env::join_paths(kept).ok()
+}
+
 /// Resuelve un ejecutable y su origen siguiendo el orden documentado arriba.
 pub fn resolve(name: &str, env_var: &str) -> Option<(PathBuf, Source)> {
     if let Ok(explicit) = std::env::var(env_var)
@@ -144,6 +201,34 @@ mod tests {
         // En los tests nunca se llama a `init`, así que no hay carpeta gestionada
         // y la resolución cae a la variable de entorno / PATH.
         assert!(managed_bin_dir().is_none());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn quita_las_rutas_de_la_appimage_y_conserva_el_resto() {
+        let appdir = Path::new("/tmp/.mount_Downli123");
+        let value = OsStr::new("/tmp/.mount_Downli123/usr/lib:/opt/mis-libs:/usr/lib64");
+        let clean = strip_paths_inside(value, appdir).expect("queda alguna ruta");
+        assert_eq!(clean, OsStr::new("/opt/mis-libs:/usr/lib64"));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn sin_rutas_propias_la_variable_desaparece() {
+        let appdir = Path::new("/tmp/.mount_Downli123");
+        let value = OsStr::new("/tmp/.mount_Downli123/usr/lib:/tmp/.mount_Downli123/lib64");
+        assert_eq!(strip_paths_inside(value, appdir), None);
+    }
+
+    /// Vale en cualquier plataforma: una ruta suelta que no cae dentro de la
+    /// AppImage se conserva tal cual.
+    #[test]
+    fn conserva_una_ruta_ajena_a_la_appimage() {
+        let value = OsStr::new("/usr/lib");
+        assert_eq!(
+            strip_paths_inside(value, Path::new("/tmp/.mount_Downli123")),
+            Some(value.to_os_string())
+        );
     }
 
     /// `yt-dlp` siempre resuelve a algo (ruta del PATH o el nombre pelado).

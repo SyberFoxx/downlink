@@ -307,7 +307,7 @@
       engine="ffmpeg"
       name="ffmpeg"
       idleLabel="Descargar ffmpeg"
-      missingLabel="No se encontró ffmpeg en el sistema"
+      missingLabel="No hay un ffmpeg que funcione en el sistema"
       autoLabel="Descargar ffmpeg al iniciar si falta"
       hint="Los builds de ffmpeg pesan ~150 MB. Si ya tienes ffmpeg instalado se respeta el tuyo."
       bind:autoChecked={settings.value.autoDownloadFfmpeg}

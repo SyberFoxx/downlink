@@ -442,6 +442,22 @@ con degradado **violeta→índigo** (`#8b5cf6` → `#7c3aed` → `#4338ca`).
    `libayatana-appindicator3-dev`. Para el AppImage, además `libfuse2` y
    `patchelf`.
 
+7. **La AppImage inyecta `LD_LIBRARY_PATH`**: su lanzador exporta
+   `LD_LIBRARY_PATH=$APPDIR/usr/lib:…` y empaqueta sus propias `libcrypto.so.3`,
+   `libssh.so.4`, `libcurl-gnutls.so.4` (más antiguas que las del sistema). Si un
+   proceso hijo las hereda, **`ffmpeg` y `node` del sistema no arrancan**
+   (`version 'OPENSSL_3.4.0' not found`). Síntomas (solo en la AppImage, nunca en
+   `tauri dev`): «Postprocessing: ffmpeg not found» al descargar, YouTube pidiendo
+   cookies (sin `node` no se resuelven los desafíos JS) y Ajustes diciendo «no
+   detectado» aunque ffmpeg esté instalado. Por eso **todo proceso externo se lanza
+   con `engine::command()`**, que sanea `LD_LIBRARY_PATH`/`LD_PRELOAD` quitando las
+   rutas bajo `APPDIR` (fuera de una AppImage no hace nada). No vuelvas a usar
+   `Command::new()` directo para yt-dlp/ffmpeg.
+8. **`ffmpeg_update_available` no da por bueno un ffmpeg que no arranca**: si el
+   binario resuelto no reporta versión, se considera que no sirve y Ajustes ofrece
+   la copia gestionada. Antes un ffmpeg roto bloqueaba cualquier salida (ni
+   convertía ni dejaba descargar otro).
+
 ## CI
 
 `.github/workflows/ci.yml` — dos jobs en push/PR a `main`:

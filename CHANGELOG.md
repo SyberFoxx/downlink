@@ -7,6 +7,12 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-17
+
+### Fixed
+- **AppImage: ffmpeg y node no arrancaban** dentro de la app (y por tanto fallaba el postprocesado con «Postprocessing: ffmpeg not found», YouTube se quejaba de las cookies y Ajustes decía que no había ffmpeg). La AppImage exporta `LD_LIBRARY_PATH` hacia sus propias bibliotecas y empaqueta un `libcrypto.so.3`/`libssh.so.4` más antiguos que los del sistema; como los procesos hijo heredaban esa variable, el `ffmpeg` y el `node` **del sistema** cargaban esos `.so` y no arrancaban (`version 'OPENSSL_3.4.0' not found`). Ahora los binarios externos que lanza Downlink reciben un entorno saneado
+- Ajustes ya ofrece **descargar ffmpeg** cuando el ffmpeg del sistema existe pero **no se puede ejecutar**: antes lo daba por bueno y el botón «Descargar» ni aparecía, dejando la app sin conversión ni postprocesado
+
 ## [0.10.0] - 2026-10-17
 
 ### Added
