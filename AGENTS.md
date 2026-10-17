@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.8.0**
+- Versión actual: **0.9.0**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -252,7 +252,9 @@ la galería, busca y re-descarga reutilizando las `options` guardadas.
 `build_download_args(settings, url, options)` arma todo. Los argumentos comunes (`common_args`) añaden cookies, runtime JS y EJS. `--ignore-config` **siempre** se pasa: se ignora el `yt-dlp.conf` del usuario a propósito.
 
 `DownloadOptions` (`camelCase` en JSON):
-`mode` (`"video" | "audio"`), `videoHeight`, `container`, `audioFormat`, `audioQuality`, `volumeDb`, `normalizeAudio`, `embedMetadata`, `embedThumbnail`, `clipStart`, `clipEnd`, `subtitles`, `subtitleLangs`, `subtitleAuto`, `embedSubtitles`.
+`mode` (`"video" | "audio"`), `videoHeight`, `container`, `audioFormat`, `audioQuality`, `volumeDb`, `normalizeAudio`, `embedMetadata`, `embedThumbnail`, `clipStart`, `clipEnd`, `subtitles`, `subtitleLangs`, `subtitleAuto`, `embedSubtitles`, `sponsorblock`, `sponsorblockMode` (`"remove" | "mark"`), `sponsorblockCategories`.
+
+- **SponsorBlock** (solo YouTube): `sponsorblock` añade `--sponsorblock-remove` o `--sponsorblock-mark` (`sponsorblockMode`) con la lista de categorías. `SPONSORBLOCK_CATEGORIES` (en `ytdlp.rs`) es el catálogo permitido: las desconocidas se descartan, las repetidas se deduplican, se limpian espacios y, si al final no queda ninguna, se usa `sponsor`. Los 7 tests de SponsorBlock en `ytdlp.rs` cubren esto.
 
 - **Recorte**: `clipStart`/`clipEnd` (segundos, `f64`) → `--download-sections "*HH:MM:SS-HH:MM:SS"` (fin `inf` si falta). **No** se usa `--force-keyframes-at-cuts`: re-codifica con los códecs por defecto de ffmpeg (mpeg4) y rompería la preferencia H.264/AAC del MP4. El corte queda alineado a keyframes (puede variar unas décimas).
 - **Subtítulos**: `subtitles` activa `--write-subs` (+ `--write-auto-subs` si `subtitleAuto`) y `--sub-langs` (por defecto `es`). Con `embedSubtitles` (solo vídeo) usa `--embed-subs`; si no, `--convert-subs srt` para dejar `.srt` al lado. En audio nunca se incrustan.
@@ -439,7 +441,9 @@ Resumen:
 - **v0.4** ✅ — playlists: detección, listado, selección y encolado.
 - **v0.5** ✅ — historial con galería, búsqueda y re-descarga + persistencia local.
 - **v0.6** ✅ — recorte de clips (`--download-sections`) y subtítulos (descarga e incrustado).
-- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0), descarga de ffmpeg ✅ (v0.7.1), sistema de temas ✅ (v0.8.0); pendiente sidecars empaquetados, tray e instaladores.
+- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0), descarga de ffmpeg ✅ (v0.7.1); pendiente sidecars empaquetados e instaladores.
+- **v0.8** ✅ — sistema de temas (tokens, 10 temas, acento, fondo, paleta de pywal/wallust).
+- **v0.9** ✅ — carpeta configurable, SponsorBlock, cola persistente, notificaciones, bandeja, reintentar, toasts, pegado global y marca propia.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
 ## Al terminar un cambio

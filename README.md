@@ -65,6 +65,14 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como pro
 - 💬 **Subtítulos** — descárgalos en los idiomas que quieras (`es,en`…), incluidos los automáticos
 - 🧩 **Incrustados o como archivo** — embébelos en el vídeo (MP4/MKV) o déjalos como `.srt` sueltos
 
+### Escritorio
+- 📂 **Carpeta de descarga configurable** — elige dónde guardar los archivos (se crea si no existe)
+- 🛡️ **SponsorBlock** — quita o marca los segmentos promocionales de YouTube (patrocinio, intro, outro, relleno…)
+- 💾 **Cola que persiste** — los pendientes se guardan y se recuperan al abrir la app; yt-dlp retoma el `.part`
+- 🔔 **Notificaciones** — aviso del sistema al terminar o fallar, solo si la ventana no está delante
+- 📌 **Bandeja del sistema** — menú con «Mostrar»/«Salir», estado de la cola y opción de cerrar a la bandeja
+- 🔄 **Reintentar** — los trabajos fallidos o cancelados se reencolan con las mismas opciones
+
 ### Motor y compatibilidad
 - 🧩 **Detección del motor** — muestra de dónde sale cada binario (sistema, gestionado por Downlink o incluido con la app)
 - ⬆️ **Auto-update de yt-dlp** — descarga su propia copia desde los releases oficiales, la verifica (SHA-256 + ejecución) y la mantiene al día sola
@@ -79,7 +87,7 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como pro
 - 🖼️ **Imagen de fondo** — pon tu wallpaper por detrás de los paneles, con intensidad y desenfoque ajustables
 - 🐧 **Se integra con tu escritorio** — el modo automático sigue el claro/oscuro del sistema y adopta la paleta de **pywal/wallust** (Hyprland y demás *ricing*)
 
-En el [roadmap](#roadmap): empaquetado de yt-dlp/ffmpeg, system tray e instaladores.
+En el [roadmap](#roadmap): empaquetado de yt-dlp/ffmpeg e instaladores.
 
 ## Tech Stack
 
@@ -203,8 +211,17 @@ downlink/
 - [x] Descarga de **ffmpeg** (Linux/Windows) si falta, con actualización manual
 - [x] Sistema de temas: claro/oscuro, temas incluidos, acento e imagen de fondo (v0.8)
 - [ ] Empaquetado de yt-dlp/ffmpeg como sidecars
-- [ ] System tray con progreso + notificaciones
 - [ ] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS)
+
+### v0.9 — Escritorio ✅
+- [x] Carpeta de descarga configurable
+- [x] SponsorBlock: quitar o marcar segmentos promocionales por categoría
+- [x] Cola persistente entre sesiones (`queue.json`)
+- [x] Notificaciones al terminar (solo si la ventana no está delante)
+- [x] System tray con estado de la cola + cerrar a la bandeja
+- [x] Reintentar trabajos fallidos/cancelados + avisos globales (toasts)
+- [x] Pegar o arrastrar enlaces desde cualquier vista
+- [x] Marca propia: logotipo e iconos de la aplicación
 
 ### v1.0 — Android 📱
 - [ ] Port a Tauri 2 mobile (arm64)

@@ -7,6 +7,8 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-17
+
 ### Added
 - **Carpeta de descarga configurable**: en Ajustes se elige dónde guardar los archivos (se crea si no existe); por defecto sigue siendo la carpeta de Descargas del sistema
 - **SponsorBlock**: se pueden **quitar** o **marcar** los segmentos promocionales de YouTube eligiendo las categorías a tratar (patrocinio, autopromoción, interacción, intro, outro, avance, relleno y música fuera de tema)
