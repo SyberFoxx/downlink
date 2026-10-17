@@ -96,7 +96,7 @@ Los instaladores de cada versión se publican solos en [GitHub Releases](https:/
 | Plataforma | Formato |
 |---|---|
 | Debian / Ubuntu | `.deb` → `sudo apt install ./Downlink_*.deb` |
-| Fedora / openSUSE | `.rpm` → `sudo rpm -i Downlink_*.rpm` |
+| Fedora / openSUSE | `.rpm` → `sudo dnf install ./Downlink-*.rpm` (o `sudo zypper install ./Downlink-*.rpm`) |
 | Cualquier distro Linux | `AppImage` → `chmod +x Downlink_*.AppImage && ./Downlink_*.AppImage` |
 | Windows 10 / 11 | `.msi` o `.exe` (NSIS) — instalar y listo |
 
