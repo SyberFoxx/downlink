@@ -21,6 +21,7 @@ use std::fs::File as StdFile;
 use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -63,6 +64,15 @@ pub const ENGINE_UPDATE_EVENT: &str = "engine-update";
 static YTDLP_UPDATING: AtomicBool = AtomicBool::new(false);
 static FFMPEG_UPDATING: AtomicBool = AtomicBool::new(false);
 static QUICKJS_UPDATING: AtomicBool = AtomicBool::new(false);
+
+/// Último progreso emitido por `engine-update`.
+///
+/// La actualización arranca en segundo plano al abrir la app, a menudo antes de
+/// que la UI exista, y un evento que nadie escucha se pierde. Guardarlo aquí
+/// permite que la interfaz se hidrate al montarse y muestre la barra aunque la
+/// descarga haya empezado hace unos milisegundos. Solo vive en memoria: cada
+/// arranque empieza de cero.
+static LAST_PROGRESS: Mutex<Option<UpdateProgress>> = Mutex::new(None);
 
 /// Fase del proceso de actualización (para la UI).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -121,15 +131,27 @@ fn emit_phase(
     percent: Option<f64>,
     message: Option<String>,
 ) {
-    let _ = app.emit(
-        ENGINE_UPDATE_EVENT,
-        UpdateProgress {
-            engine: engine.to_string(),
-            phase,
-            percent,
-            message,
-        },
-    );
+    let progress = UpdateProgress {
+        engine: engine.to_string(),
+        phase,
+        percent,
+        message,
+    };
+    record_progress(&progress);
+    let _ = app.emit(ENGINE_UPDATE_EVENT, progress);
+}
+
+/// Recuerda el último progreso para poder consultarlo desde la UI.
+fn record_progress(progress: &UpdateProgress) {
+    if let Ok(mut last) = LAST_PROGRESS.lock() {
+        *last = Some(progress.clone());
+    }
+}
+
+/// Último progreso de motor visto en esta sesión (`None` si aún no ha habido
+/// ninguno). Es lo que consulta la UI al montarse.
+pub fn last_progress() -> Option<UpdateProgress> {
+    LAST_PROGRESS.lock().ok().and_then(|last| last.clone())
 }
 
 fn client() -> Result<Client, String> {
@@ -1422,5 +1444,31 @@ cccc3333 *yt-dlp.exe\n";
         assert!(std::fs::metadata(&out_ffmpeg).unwrap().len() > 1_000_000);
         assert!(std::fs::metadata(&out_ffprobe).unwrap().len() > 1_000_000);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// La UI se suscribe a `engine-update` cuando ya monta, y la descarga de
+    /// arranque puede haber empezado antes: este estado es lo que la permite
+    /// mostrar la barra aunque haya llegado tarde a los primeros eventos.
+    #[test]
+    fn recuerda_el_ultimo_progreso_de_motor() {
+        record_progress(&UpdateProgress {
+            engine: "yt-dlp".to_string(),
+            phase: UpdatePhase::Downloading,
+            percent: Some(42.0),
+            message: None,
+        });
+
+        let last = last_progress().expect("debe recordar el último progreso");
+        assert_eq!(last.engine, "yt-dlp");
+        assert_eq!(last.phase, UpdatePhase::Downloading);
+        assert_eq!(last.percent, Some(42.0));
+
+        record_progress(&UpdateProgress {
+            engine: "yt-dlp".to_string(),
+            phase: UpdatePhase::Done,
+            percent: Some(100.0),
+            message: None,
+        });
+        assert_eq!(last_progress().unwrap().phase, UpdatePhase::Done);
     }
 }
