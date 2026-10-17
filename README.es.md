@@ -146,6 +146,38 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
 
 Para usar la aplicación **no** hace falta instalar `yt-dlp`, `ffmpeg` ni un runtime JS: Downlink descarga sus propias copias si faltan.
 
+## Cookies
+
+Algunos sitios —YouTube sobre todo— solo te dan los buenos formatos cuando tienes la sesión iniciada, así que Downlink puede tomar prestada la sesión de tu navegador. Elige un modo en **Ajustes → Cookies**:
+
+| Modo | Qué hace | Cuándo usarlo |
+| --- | --- | --- |
+| **Desde el navegador** | Lee la sesión directamente del navegador instalado | Firefox (en cualquier sistema) o Chrome/Brave/Edge con el navegador cerrado |
+| **Desde archivo** | Carga un `cookies.txt` que exportas tú | Windows con un navegador Chromium, o siempre que «Desde el navegador» falle |
+| **Desactivado** | Sin cookies | Vídeos públicos sin restricciones |
+
+### Según tu navegador
+
+- **Firefox** — «Desde el navegador», siempre es el camino fácil. Firefox no bloquea su base de cookies, así que funciona aunque tengas el navegador abierto.
+- **Chrome, Brave, Edge, Chromium, Vivaldi u Opera en Windows** — Windows bloquea la base de cookies mientras el navegador está en marcha, así que «Desde el navegador» falla con *«Could not copy Chrome cookie database»* ([yt-dlp#7271](https://github.com/yt-dlp/yt-dlp/issues/7271)). Cierra el navegador por completo (bandeja + Administrador de tareas) o usa un `cookies.txt` (aquí abajo).
+- **Los mismos navegadores Chromium en Linux y macOS** — «Desde el navegador» funciona normalmente aunque el navegador esté abierto: en Linux los bloqueos son solo de cortesía.
+- **Safari y cualquier otro** — Downlink no lo detecta, así que usa un `cookies.txt`.
+
+### Cómo exportar un cookies.txt
+
+Sirve con cualquier navegador y es la alternativa a todo lo anterior.
+
+1. Instala una extensión que exporte cookies en formato Netscape: [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) para Chrome/Brave/Edge o *Cookie-Editor* para Firefox.
+2. Entra en el sitio con la sesión iniciada (p. ej. <https://www.youtube.com>), pulsa la extensión y elige **Export**.
+3. Guarda el archivo en un sitio seguro y, en Downlink, ve a **Ajustes → Cookies → Desde archivo** y selecciónalo.
+4. Pulsa **Probar conexión**: deberías ver la lista de formatos en lugar del aviso anti-bot.
+
+Tres detalles que conviene tener en cuenta:
+
+- El archivo **es tu sesión**: no lo compartas y bórralo cuando dejes de necesitarlo.
+- Las cookies caducan: si vuelve el aviso anti-bot, exporta un archivo nuevo.
+- Downlink solo entrega el archivo al proceso local de yt-dlp (`--cookies`); la app no lo guarda ni lo sube a ningún sitio.
+
 ## Solución de problemas
 
 **«YouTube pidió verificación anti-bot» / «Sign in to confirm you're not a bot»**
@@ -156,13 +188,15 @@ YouTube bloquea por IP cuando hay muchas peticiones o la sesión no es válida. 
 2. Pulsa **Probar conexión** para verificar.
 3. Si sigue fallando, cierra el navegador (para que su base de cookies no esté bloqueada) e inténtalo de nuevo.
 
+El paso a paso según tu navegador está en [Cookies](#cookies).
+
 **«Could not copy Chrome cookie database» (Windows)**
 
 Windows **bloquea la base de cookies del navegador** mientras está abierto, así que yt-dlp no puede leerla — en Linux suele funcionar incluso con el navegador abierto, porque los bloqueos de Linux son solo de cortesía. Dice «Chrome» aunque uses Brave o Edge: es la palabra que trae yt-dlp, no un error tuyo.
 
 1. Cierra el navegador por completo: sácalo de la bandeja y comprueba en el Administrador de tareas que no queden procesos `brave.exe`/`chrome.exe`.
 2. Pulsa **Probar conexión** otra vez.
-3. Si sigue fallando, exporta las cookies a un archivo `.txt` (p. ej. con *Get cookies.txt LOCALLY*) y cambia **Ajustes → Cookies → Desde archivo**.
+3. Si sigue fallando, exporta las cookies a un archivo `.txt` (p. ej. con *Get cookies.txt LOCALLY*) y cambia **Ajustes → Cookies → Desde archivo**: la guía completa está en [Cookies](#cookies).
 
 Detalles: [yt-dlp#7271](https://github.com/yt-dlp/yt-dlp/issues/7271).
 
