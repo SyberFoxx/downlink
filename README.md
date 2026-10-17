@@ -87,7 +87,34 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como pro
 - 🖼️ **Imagen de fondo** — pon tu wallpaper por detrás de los paneles, con intensidad y desenfoque ajustables
 - 🐧 **Se integra con tu escritorio** — el modo automático sigue el claro/oscuro del sistema y adopta la paleta de **pywal/wallust** (Hyprland y demás *ricing*)
 
-En el [roadmap](#roadmap): empaquetado de yt-dlp/ffmpeg e instaladores.
+En el [roadmap](#roadmap): empaquetado de yt-dlp/ffmpeg.
+
+## Instalar
+
+Los instaladores de cada versión se publican solos en [GitHub Releases](https://github.com/SyberFoxx/downlink/releases):
+
+| Plataforma | Formato |
+|---|---|
+| Debian / Ubuntu | `.deb` → `sudo apt install ./Downlink_*.deb` |
+| Fedora / openSUSE | `.rpm` → `sudo rpm -i Downlink_*.rpm` |
+| Cualquier distro Linux | `AppImage` → `chmod +x Downlink_*.AppImage && ./Downlink_*.AppImage` |
+| Windows 10 / 11 | `.msi` o `.exe` (NSIS) — instalar y listo |
+
+macOS aún no tiene paquete propio (en el [roadmap](#roadmap)); de momento se ejecuta desde el código con `npm run tauri dev`.
+
+No necesitas instalar yt-dlp ni ffmpeg: si no los encuentran en el sistema, Downlink descarga y actualiza sus propias copias.
+
+### Empaquetar en local
+
+```bash
+npm run tauri build                            # deb + rpm + AppImage (Linux) / MSI + NSIS (Windows)
+npm run tauri build -- --bundles deb,rpm       # solo los formatos que quieras
+```
+
+Los instaladores salen en `src-tauri/target/release/bundle/`. En Linux hacen
+falta los paquetes de desarrollo (`libayatana-appindicator3-dev` en
+Debian/Ubuntu, `libayatana-appindicator-gtk3-devel` en Fedora) y, para el
+AppImage, `libfuse2` y `patchelf`.
 
 ## Tech Stack
 
@@ -211,7 +238,7 @@ downlink/
 - [x] Descarga de **ffmpeg** (Linux/Windows) si falta, con actualización manual
 - [x] Sistema de temas: claro/oscuro, temas incluidos, acento e imagen de fondo (v0.8)
 - [ ] Empaquetado de yt-dlp/ffmpeg como sidecars
-- [ ] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS)
+- [x] Instaladores (deb/rpm/AppImage, Windows MSI/NSIS) — v0.10, publicados en GitHub Releases
 
 ### v0.9 — Escritorio ✅
 - [x] Carpeta de descarga configurable

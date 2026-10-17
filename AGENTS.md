@@ -7,7 +7,7 @@ Instrucciones y contexto para agentes que trabajen en este repositorio. **Manté
 App de escritorio (Tauri 2) para descargar video/audio de +1800 sitios con una UI moderna (Svelte 5). El motor de descarga es `yt-dlp`; `ffmpeg` hace conversión, remux, filtros de audio e incrustado de metadatos. Ambos se invocan como **procesos externos** (todavía no empaquetados como sidecars).
 
 - Repo: `github.com/SyberFoxx/downlink` (privado)
-- Versión actual: **0.9.0**
+- Versión actual: **0.10.0**
 - Idioma del proyecto: **español** (comentarios, docs, textos de UI, mensajes de error). Los identificadores de código también están en español cuando es natural.
 
 ## Stack
@@ -74,7 +74,9 @@ downlink/
 │   │   └── ytdlp.rs             # Args, probe, parser de salida, spawn, errores, tests
 │   ├── Cargo.toml
 │   └── tauri.conf.json
-└── .github/workflows/ci.yml     # CI: frontend + Rust (ubuntu + windows)
+└── .github/workflows/
+    ├── ci.yml                   # CI: frontend + Rust (ubuntu + windows)
+    └── release.yml              # Release: instaladores (deb/rpm/AppImage + MSI/NSIS)
 ```
 
 ## Comandos
@@ -90,7 +92,15 @@ npm run build                                  # build del frontend
 cd src-tauri && cargo fmt --all                # formatea
 cd src-tauri && cargo clippy --all-targets -- -D warnings   # lints (deben estar limpios)
 cd src-tauri && cargo test                     # tests unitarios
+
+# Empaquetar instaladores (Linux: deb/rpm/AppImage; Windows: MSI/NSIS)
+npm run tauri build                            # todo lo que soporte el SO
+npm run tauri build -- --bundles deb,rpm       # solo lo que se quiera
 ```
+
+Para empaquetar en Linux hace falta el paquete **`-devel`** de appindicator
+(provee el `.pc` de pkg-config) y, para el AppImage, `libfuse2` y `patchelf`
+(ver «Trampas técnicas»).
 
 El frontend también soporta `npm run dev` (Vite solo, sin shell nativo — los `invoke()` fallarán).
 
@@ -421,6 +431,14 @@ con degradado **violeta→índigo** (`#8b5cf6` → `#7c3aed` → `#4338ca`).
 3. **«Original (sin recomprimir)» + filtros** es imposible (los filtros exigen re-codificar): el backend fuerza `m4a` y la UI desactiva el control de volumen para ese caso.
 4. **`volume=0` no debe generar filtro** (evita re-codificar de más).
 5. La miniatura se incrusta con ffmpeg; **no se necesita AtomicParsley**.
+6. **Empaquetar en Linux exige el paquete `-devel` de appindicator**: `tauri-cli`
+   consulta pkg-config para calcular las dependencias de los `.deb`/`.rpm` y
+   paniquea con «Can't detect any appindicator library» (`rust.rs`) si no
+   encuentra el `.pc`, aunque el `cargo build` funcione (Tauri carga
+   appindicator con `dlopen`, así que solo hacen falta los runtime). Fedora:
+   `libayatana-appindicator-gtk3-devel`; Debian/Ubuntu:
+   `libayatana-appindicator3-dev`. Para el AppImage, además `libfuse2` y
+   `patchelf`.
 
 ## CI
 
@@ -429,6 +447,19 @@ con degradado **violeta→índigo** (`#8b5cf6` → `#7c3aed` → `#4338ca`).
 - **rust** (ubuntu + windows, matriz): `cargo fmt --check` → `cargo clippy -D warnings` → `cargo test` → `cargo check`.
 
 Verifica el CI con: `gh run watch <run-id> --exit-status`.
+
+`.github/workflows/release.yml` — empaquetado y publicación:
+
+- Se dispara al etiquetar `v*` (o a mano con `workflow_dispatch`, que solo sube
+  los artefactos sin publicar — sirve para probar el workflow).
+- Job **bundle** (matriz ubuntu + windows): `npm run tauri build -- --bundles …`
+  → `.deb`, `.rpm` y AppImage en Linux; `.msi` y NSIS en Windows. En Linux
+  instala además `libfuse2` y `patchelf` (necesarios para el AppImage). Los
+  binarios se suben como artefactos.
+- Job **release** (solo con tag, `permissions: contents: write`): junta los
+  artefactos con `download-artifact` y crea la release con
+  `gh release create <tag> dist/*` (o `gh release upload --clobber` si la
+  release ya existe).
 
 ## Estado y roadmap
 
@@ -441,9 +472,10 @@ Resumen:
 - **v0.4** ✅ — playlists: detección, listado, selección y encolado.
 - **v0.5** ✅ — historial con galería, búsqueda y re-descarga + persistencia local.
 - **v0.6** ✅ — recorte de clips (`--download-sections`) y subtítulos (descarga e incrustado).
-- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0), descarga de ffmpeg ✅ (v0.7.1); pendiente sidecars empaquetados e instaladores.
+- **v0.7** 🚧 — madurez: detección de sidecars ✅ (v0.6.1), auto-update de yt-dlp ✅ (v0.7.0), descarga de ffmpeg ✅ (v0.7.1); pendiente solo sidecars empaquetados.
 - **v0.8** ✅ — sistema de temas (tokens, 10 temas, acento, fondo, paleta de pywal/wallust).
 - **v0.9** ✅ — carpeta configurable, SponsorBlock, cola persistente, notificaciones, bandeja, reintentar, toasts, pegado global y marca propia.
+- **v0.10** ✅ — instaladores deb/rpm/AppImage y MSI/NSIS publicados en GitHub Releases por el workflow `release.yml`.
 - **v1.0** — Android (arm64); requiere empaquetar yt-dlp/ffmpeg por arquitectura.
 
 ## Al terminar un cambio
