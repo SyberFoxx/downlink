@@ -7,6 +7,19 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-10-17
+
+### Added
+- **Barra de progreso de los motores**: la descarga y actualización de yt-dlp, ffmpeg y el runtime JS se ven ahora en una barra fija arriba del contenido —fase, porcentaje, punto de actividad y línea de progreso de 2 px—, visible desde cualquier vista. Antes solo aparecía dentro de Ajustes, así que las descargas que la app hace sola al arrancar pasaban desapercibidas; el backend recuerda el último progreso y la interfaz lo recupera aunque se monte unas milésimas de segundo más tarde
+
+### Changed
+- **README bilingüe**: el principal pasa a inglés (es lo que se ve en GitHub) con un selector de idioma arriba, y el español completo vive en `README.es.md` con el selector inverso. Los dos incluyen ahora una **guía de cookies** con los tres modos, el detalle por navegador (Firefox directo; Chromium bloqueado en Windows) y el paso a paso para exportar un `cookies.txt`
+
+### Fixed
+- **Aviso de cookies bloqueadas mucho más claro**: en Windows, cuando el navegador tiene su base de cookies bloqueada, el mensaje explica que hay que cerrarlo por completo —bandeja y procesos en segundo plano incluidos— y ofrece el plan B con un `cookies.txt`. Las cookies cifradas se distinguen de las bloqueadas, y el aviso ya no se confunde con un fallo de la app
+- Los **errores largos de yt-dlp respetan los saltos de línea** en «Probar conexión» y en la cola: antes se amontonaban en una sola línea
+- La **versión de la barra lateral se lee de la aplicación** en vez de estar escrita a mano: deja de haber que acordarse de actualizarla en cada versión y desaparece el sufijo `-dev` de las versiones publicadas
+
 ## [0.10.2] - 2026-10-17
 
 ### Added

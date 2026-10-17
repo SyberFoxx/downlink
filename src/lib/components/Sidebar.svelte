@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import { appVersion } from "$lib/api";
   import Logo from "$lib/components/Logo.svelte";
   import type { AppView } from "$lib/types";
 
@@ -8,6 +10,17 @@
   }
 
   let { view, onNavigate }: Props = $props();
+
+  /** Versión real del binario, para no mantenerla escrita a mano. */
+  let version = $state("");
+
+  onMount(async () => {
+    try {
+      version = await appVersion();
+    } catch {
+      // Sin backend (`npm run dev` en el navegador) no hay versión que mostrar.
+    }
+  });
 
   // Cada elemento lleva el/los trazados de su icono (Heroicons 24 outline),
   // dibujados con el mismo grosor para que la barra se vea coherente.
@@ -86,6 +99,6 @@
   <div
     class="mt-auto px-4 py-3 text-[11px] text-ink-faint max-md:hidden"
   >
-    v0.10.2-dev · potenciado por yt-dlp
+    {#if version}v{version} · {/if}potenciado por yt-dlp
   </div>
 </aside>

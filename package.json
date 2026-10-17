@@ -1,6 +1,6 @@
 {
   "name": "downlink",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "description": "Descarga vídeo y audio de más de 1800 sitios con una interfaz moderna",
   "author": "Ramses Sotomayor",
   "type": "module",

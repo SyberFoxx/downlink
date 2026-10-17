@@ -243,6 +243,12 @@ fn engine_update_state() -> Option<updater::UpdateProgress> {
     updater::last_progress()
 }
 
+/// Versión de la aplicación, para mostrarla sin repetirla a mano en la UI.
+#[tauri::command]
+fn app_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 /// Lee la imagen de fondo y la devuelve como `data:` URL lista para CSS.
 #[tauri::command]
 async fn read_wallpaper(path: String) -> Result<String, String> {
@@ -358,6 +364,7 @@ pub fn run() {
             check_js_runtime_update,
             update_js_runtime,
             engine_update_state,
+            app_version,
             read_wallpaper,
             read_system_palette,
             default_download_dir,
@@ -365,4 +372,20 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    /// La versión que muestra la interfaz sale del `Cargo.toml`; los
+    /// instaladores, del `tauri.conf.json`. Si se bumpa uno y no el otro, la
+    /// app publicada diría una versión distinta de la que anuncia su release.
+    #[test]
+    fn la_version_coincide_con_tauri_conf() {
+        let conf = include_str!("../tauri.conf.json");
+        let esperado = format!("\"version\": \"{}\"", env!("CARGO_PKG_VERSION"));
+        assert!(
+            conf.contains(&esperado),
+            "tauri.conf.json no declara {esperado}; revisa el bump de versión"
+        );
+    }
 }

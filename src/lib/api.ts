@@ -132,6 +132,11 @@ export function engineUpdateState(): Promise<EngineUpdateProgress | null> {
   return invoke<EngineUpdateProgress | null>("engine_update_state");
 }
 
+/** Versión de la app (la del `Cargo.toml`), para no repetirla a mano en la UI. */
+export function appVersion(): Promise<string> {
+  return invoke<string>("app_version");
+}
+
 export async function pickCookiesFile(): Promise<string | null> {
   const selected = await open({
     multiple: false,
