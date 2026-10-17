@@ -233,6 +233,16 @@ async fn update_js_runtime(app: tauri::AppHandle) -> Result<updater::UpdateCheck
     updater::update_js_runtime(&app).await
 }
 
+/// Último progreso de actualización de motor visto en esta sesión.
+///
+/// Existe para la carrera de arranque: `auto_update` se lanza antes de que la
+/// UI haya podido suscribirse al evento `engine-update`, y sin este estado el
+/// aviso no aparecería cuando la app se descarga los motores sola al abrirse.
+#[tauri::command]
+fn engine_update_state() -> Option<updater::UpdateProgress> {
+    updater::last_progress()
+}
+
 /// Lee la imagen de fondo y la devuelve como `data:` URL lista para CSS.
 #[tauri::command]
 async fn read_wallpaper(path: String) -> Result<String, String> {
@@ -347,6 +357,7 @@ pub fn run() {
             update_ffmpeg,
             check_js_runtime_update,
             update_js_runtime,
+            engine_update_state,
             read_wallpaper,
             read_system_palette,
             default_download_dir,

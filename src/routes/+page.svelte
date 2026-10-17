@@ -2,8 +2,10 @@
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
   import Sidebar from "$lib/components/Sidebar.svelte";
+  import EngineIndicator from "$lib/components/EngineIndicator.svelte";
   import Toasts from "$lib/components/Toasts.svelte";
   import { initTheme, theme } from "$lib/theme.svelte";
+  import { startEngineListener } from "$lib/engine.svelte";
   import {
     QUEUE_DRAG_TYPE,
     extractUrls,
@@ -91,6 +93,9 @@
     // La cola se suscribe aquí (raíz) para que el estado se mantenga aunque
     // el usuario esté en Historial o Ajustes.
     const unlistenQueue = startQueueListener();
+    // Igual con la barra de motores: la app se descarga yt-dlp/ffmpeg al
+    // arrancar y el aviso tiene que verse aunque estés en otra vista.
+    const unlistenEngine = startEngineListener();
 
     const onPaste = (e: ClipboardEvent) => {
       const target = e.target;
@@ -114,6 +119,7 @@
 
     return () => {
       unlistenQueue.then((un) => un());
+      unlistenEngine.then((un) => un());
       window.removeEventListener("paste", onPaste);
       window.removeEventListener("dragenter", onDragEnter);
       window.removeEventListener("dragleave", onDragLeave);
@@ -141,6 +147,8 @@
     bind:this={mainEl}
     class="min-h-0 flex-1 overflow-y-auto max-md:pt-[env(safe-area-inset-top)]"
   >
+    <!-- Fuera de `{#key view}`: el aviso no debe perderse al cambiar de vista. -->
+    <EngineIndicator />
     {#key view}
       <div in:fly={viewTransition}>
         {#if view === "ajustes"}

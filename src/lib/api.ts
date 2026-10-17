@@ -122,6 +122,16 @@ export function onEngineUpdate(
   );
 }
 
+/**
+ * Último progreso de motor registrado por el backend en esta sesión.
+ *
+ * La app se descarga yt-dlp/ffmpeg al arrancar, a veces antes de que exista el
+ * listener de `engine-update`, así que la UI usa esto para no perderse el aviso.
+ */
+export function engineUpdateState(): Promise<EngineUpdateProgress | null> {
+  return invoke<EngineUpdateProgress | null>("engine_update_state");
+}
+
 export async function pickCookiesFile(): Promise<string | null> {
   const selected = await open({
     multiple: false,
