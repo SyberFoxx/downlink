@@ -7,6 +7,13 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-17
+
+### Added
+- **Instaladores oficiales**: la app se empaqueta y se publica sola en GitHub Releases al etiquetar una versión — `.deb` y `.rpm` (Debian/Ubuntu/Fedora), **AppImage** (cualquier distro), instalador `.msi` de Windows y `.exe` de NSIS
+- Nuevo workflow **Release** (`.github/workflows/release.yml`): compila los instaladores en Linux y Windows en paralelo, los sube como artefactos y crea la release con binarios adjuntos; se puede lanzar a mano (`workflow_dispatch`) para probar sin publicar
+- Sección **Instalar** en el README con enlaces e instrucciones de uso
+
 ## [0.9.0] - 2026-10-17
 
 ### Added

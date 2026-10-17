@@ -76,6 +76,6 @@
   </nav>
 
   <div class="mt-auto px-4 py-3 text-[11px] text-ink-faint">
-    v0.9.0-dev · potenciado por yt-dlp
+    v0.10.0-dev · potenciado por yt-dlp
   </div>
 </aside>
