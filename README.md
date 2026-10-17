@@ -252,8 +252,13 @@ downlink/
 
 ### v1.0 — Android 📱
 - [ ] Port a Tauri 2 mobile (arm64)
-- [ ] UI adaptada a móvil (gestos, bottom nav)
+- [ ] UI adaptada a móvil (gestos, bottom nav, safe areas)
 - [ ] yt-dlp/ffmpeg empaquetados por arquitectura (arm64)
+
+Plan detallado (bloqueantes, adaptaciones y fases): **[docs/android-v1.md](docs/android-v1.md)**.
+
+> iOS queda fuera de alcance: la app lanza `yt-dlp` y `ffmpeg` como procesos
+> externos y iOS no permite crear procesos hijos.
 
 ## Contribuir
 
