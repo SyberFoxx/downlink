@@ -11,13 +11,14 @@ fases. Las referencias son del árbol en v0.10.0 (`archivo:línea`).
   medido en navegador, y los enlaces compartidos desde otras apps ya se reciben y
   se tratan (falta el puente nativo, que llega con el andamiaje). Quedan los
   **gestos** para reordenar la cola; después, el andamiaje Android y el motor
-  nativo.
+  nativo. La duda de fondo —cómo ejecutar el motor— ya está decidida: los
+  intérpretes van dentro del APK y yt-dlp se pone al día solo (5.4).
 
 ## Resumen
 
 | | |
 |---|---|
-| **Bloqueantes** | Ejecutar el motor (W^X), acceso al almacenamiento (SAF), scaffold Android inexistente |
+| **Bloqueantes** | Ejecutar el motor (W^X: **resuelto** en 5.4), acceso al almacenamiento (SAF), scaffold Android inexistente |
 | **A adaptar** | UI táctil, ventana, bandeja/notificaciones, cookies/navegadores, pywal/fondo, "mostrar en carpeta", CI |
 | **Ya preparado** | Tokens de tema, cola/historial/persistencia, TLS rustls, plugins, iconos Android, frontend estático |
 
@@ -49,22 +50,31 @@ sidecar o copia gestionada:
 binario dejado en el directorio de datos de la app. La copia gestionada en
 `<app_data>/bin` no puede funcionar, y en Android no hay `PATH` de usuario.
 
-**Solución**: empaquetar yt-dlp y ffmpeg **como bibliotecas nativas**
-(`jniLibs/arm64-v8a/lib*.so`), que Android extrae a `nativeLibraryDir` y ese
-directorio **sí** es ejecutable. En Android, `resolve()` debe ir directo a esa
-ruta y saltarse `PATH`, sidecar y `<app_data>/bin`.
+**Solución**: los **intérpretes y herramientas** (Python, ffmpeg, quickjs) van
+empaquetados como bibliotecas nativas (`jniLibs/arm64-v8a/lib*.so`, con
+`android:extractNativeLibs="true"`), que Android extrae a `nativeLibraryDir`, el
+único directorio ejecutable para una app normal. En Android, `resolve()` debe ir
+directo a esa ruta y saltarse `PATH`, sidecar y `<app_data>/bin`.
 
-El actualizador de motores **no aplica** en Android:
+`yt-dlp` **no** es un binario y no va por ahí: es un *zipapp* de Python que se
+**lee**, no se ejecuta, así que puede seguir viviendo en el directorio de datos y
+actualizarse solo. El detalle y por qué es compatible con Play, en 5.4.
 
-- `src-tauri/src/updater.rs:408` — `update_ytdlp()` (descarga y `rename`).
-- `src-tauri/src/updater.rs:727` — `update_ffmpeg()`.
-- `src-tauri/src/updater.rs:864` — `managed_dir()` crea `<app_data>/bin`.
-- `src-tauri/src/updater.rs:276` — `make_executable()` con `chmod 0755`.
-- `src-tauri/src/updater.rs:880` — `auto_update()` al arrancar.
+El actualizador de motores **sí aplica** en Android, pero solo para `yt-dlp`:
+
+- `src-tauri/src/updater.rs:408` — `update_ytdlp()` (descarga y `rename`): sirve
+  casi tal cual; cambia el asset y que no hay que dar permiso de ejecución.
+- `src-tauri/src/updater.rs:727` — `update_ffmpeg()`: no aplica (va en el APK).
+- `src-tauri/src/updater.rs:864` — `managed_dir()` crea `<app_data>/bin`; en
+  Android el *zipapp* vive aquí, pero no se ejecuta desde aquí.
+- `src-tauri/src/updater.rs:276` — `make_executable()` (`chmod 0755`): no hace
+  falta, el *zipapp* se lee.
+- `src-tauri/src/updater.rs:880` — `auto_update()` al arrancar: sigue valiendo.
 - `src-tauri/src/lib.rs:296` — el `setup()` lanza `updater::auto_update`.
 
-Los assets que descarga hoy son builds de **GNU/Linux** (glibc), no de Android
-(Bionic): no sirven tal cual.
+Los assets que descarga hoy son builds de **GNU/Linux** (glibc) y binarios; en
+Android el asset es el *zipapp* `yt-dlp` (código interpretado) y el resto de los
+motores van dentro del APK.
 
 ### 1.2. Almacenamiento y rutas
 
@@ -91,8 +101,10 @@ para el destino final y un directorio privado para el `.part` y el procesado.
 - `src-tauri/src/ytdlp.rs:73` — `--js-runtimes` con lo que encuentre.
 - `src-tauri/src/ytdlp.rs:88` — `--remote-components ejs:github` (solo YouTube).
 
-En Android no habrá runtime JS en el sistema: hay que empaquetarlo o resolver los
-desafíos de otra forma, igual que con el motor.
+En Android no hay runtime JS en el sistema: se empaqueta `quickjs` como
+`lib*.so` en el APK (se ejecuta desde `nativeLibraryDir`, igual que ffmpeg). A
+diferencia de yt-dlp, un runtime JS es un binario, así que no se actualiza solo:
+su versión es la de la app.
 
 ---
 
@@ -292,11 +304,22 @@ navegador real a 390×844.
 
 ### Fase C — Motores nativos (arm64)
 
-- [ ] yt-dlp y ffmpeg como `.so` arm64 (Bionic, no glibc) en `jniLibs`.
-- [ ] `resolve()` con ruta fija a `nativeLibraryDir` en Android (`engine.rs:93`).
-- [ ] Desactivar el actualizador en Android (`updater.rs`, `lib.rs:296`) y ocultar
-      sus comandos/UI.
-- [ ] Runtime JS para YouTube (empaquetado o alternativa).
+- [ ] CPython para Android (el ejecutable y su `libpython3.x.so`) compilado con el
+      NDK y empaquetado en `jniLibs` con `android:extractNativeLibs="true"` (5.4).
+- [ ] ffmpeg y quickjs como `.so` arm64 (Bionic, no glibc) en `jniLibs`.
+- [ ] `resolve()` con ruta fija a `nativeLibraryDir` en Android (`engine.rs:93`); la
+      ruta la tiene que dar el lado Kotlin (`applicationInfo.nativeLibraryDir`),
+      porque cambia con cada instalación.
+- [ ] La invocación deja de ser un binario: `<python> <zipapp-yt-dlp>` más los
+      mismos argumentos (`ytdlp.rs:456`, `:730`, `:787`).
+- [ ] Caso `android` en el actualizador: descarga del *zipapp* `yt-dlp` con
+      reemplazo atómico y sin `chmod` (`updater.rs:341`, `:408`).
+- [ ] Ajustes en Android: las filas de «comprobar/actualizar» y los interruptores de
+      descarga automática cuentan que ffmpeg y el runtime JS vienen con la app, y que
+      solo yt-dlp se pone al día solo.
+- [ ] App Bundle/`abiFilters`: no servir las tres arquitecturas al mismo teléfono.
+- [ ] CI: `cargo check --target aarch64-linux-android` y la construcción de los
+      motores, o el código `#[cfg(target_os = "android")]` no se compila nunca.
 - [ ] Verificar el `spawn` real en dispositivo (`ytdlp.rs:730`, `queue.rs:381`).
 
 ### Fase D — Almacenamiento y salida
@@ -328,23 +351,81 @@ navegador real a 390×844.
    soporte el color se aplica **a plena opacidad** en vez de desaparecer. Se
    degrada el matiz, no se rompe la interfaz. Aun así conviene fijar una versión
    mínima de WebView.
-2. **libc**: los binarios de Android usan Bionic, no glibc. Conseguir/compilar
-   yt-dlp y ffmpeg para arm64 Android es la parte con más incógnitas.
-3. **Peso del APK**: yt-dlp + ffmpeg + runtime JS por arquitectura.
-4. **W^X**: desde Android 10, una app con `targetSdk ≥ 29` **no puede ejecutar
-   binarios de su propio directorio de datos**. Es la razón por la que Termux sigue
-   en `targetSdk 28` y no está en Play. Hay dos salidas y hay que elegir antes de
-   la fase C; el resto del port no cambia:
-   - **Motores dentro del APK**, como `jniLibs` (`libytdlp.so`, `libffmpeg.so`…):
-     el instalador los deja en un directorio con permiso de ejecución, así que
-     funciona con `targetSdk` actual y en Play. A cambio, el motor **no se puede
-     actualizar solo** (cada actualización de yt-dlp es un APK nuevo) y el APK
-     engorda (decenas de MB por arquitectura; el build de ffmpeg que usa la app
-     ronda los 150 MB sin comprimir).
-   - **`targetSdk 28`**: se conserva la copia gestionada y el actualizador que ya
-     existen, pero la app queda fuera de Play (APK/F-Droid).
-   Que la app descargue el motor no basta: `updater.rs:341` no tiene caso
-   `android` a propósito hasta decidir esto.
+2. **libc**: los binarios de Android usan Bionic, no glibc. Hay que compilar
+   Python, ffmpeg y quickjs para arm64 Android; yt-dlp no se compila (es Python y
+   se ejecuta con el intérprete empaquetado, ver 5.4).
+3. **Peso del APK**: Python + ffmpeg + quickjs + el *zipapp* de yt-dlp, por
+   arquitectura.
+4. **W^X — decidido: el motor va dentro del APK y yt-dlp se actualiza solo.**
+
+   Desde Android 10, una app con `targetSdk ≥ 29` **no puede ejecutar binarios
+   escritos en su directorio de datos** (es la razón por la que Termux sigue en
+   `targetSdk 28` y no está en Play). La única carpeta ejecutable para una app
+   normal es `nativeLibraryDir`: el instalador extrae ahí lo que el APK lleva en
+   `lib/<abi>/`, así que un binario renombrado a `lib*.so` —con
+   `android:extractNativeLibs="true"`, que Play permite— se puede lanzar sin root y
+   con el `targetSdk` al día. La ruta cambia con cada instalación, así que hay que
+   preguntársela a Android (`applicationInfo.nativeLibraryDir`) y pasársela a Rust:
+   Tauri no la expone.
+
+   **Lo que no puede actualizarse solo**: `ffmpeg` y `quickjs` son binarios. Van
+   firmados dentro del APK y su versión es la de la app; actualizarlos es una
+   versión nueva de Downlink. En Ajustes, en Android, sus filas de
+   «comprobar/actualizar» y los interruptores de descarga automática deben contar
+   eso, no ofrecer una descarga que no va a pasar.
+
+   **Lo que sí se actualiza solo: `yt-dlp`, porque es Python.** Y no hace falta
+   bajar el `targetSdk` ni salirse de Play: la política de *Device and Network
+   Abuse* de Google Play prohíbe descargar **código ejecutable** (`dex`, `JAR`,
+   `.so`) de fuera de Play, pero **excluye expresamente el código interpretado**
+   —«esta restricción no se aplica al código que corre en una máquina virtual o un
+   intérprete»— y la propia política nombra Python. Así que:
+
+   - Se empaqueta un **CPython para Android** (el ejecutable como `libpythonbin.so`
+     y su `libpython3.x.so` al lado, con `LD_LIBRARY_PATH` apuntando a
+     `nativeLibraryDir`). Desde 3.13 Android es plataforma soportada por CPython
+     (PEP 738), así que se puede compilar con el NDK en CI.
+   - `yt-dlp` es el ***zipapp* oficial de sus *releases*** (el asset `yt-dlp`, que
+     empieza por `#!/usr/bin/env python3`): ~3 MB que **no se ejecutan, se leen**.
+     Vive en el directorio de datos de la app y se actualiza con un reemplazo
+     atómico (`rename`), así que no deja restos ni versiones viejas.
+   - Se lleva además una copia del *zipapp* dentro del APK como punto de partida:
+     la app funciona recién instalada y sin red, y el actualizador solo mejora lo
+     que ya hay.
+   - Con eso el comportamiento es el de escritorio: la app se pone al día sola y
+     sigue funcionando cuando YouTube cambia algo.
+
+   Comprobado con las herramientas reales: `python3 yt-dlp.zipapp --version` →
+   `2026.08.19`, y el mismo `--dump-single-json` de la app sobre un enlace de
+   prueba devuelve los metadatos igual que el binario (y `--ffmpeg-location`, que
+   `common_args` ya añade cuando ffmpeg no está en el `PATH`, apunta al del APK).
+
+   Coste a cambio: cada análisis y cada descarga arrancan un intérprete de más
+   (unos milisegundos y unos MB por proceso). Es el precio de tener un motor que no
+   caduca; un yt-dlp empaquetado en el APK arrancaría más rápido y dejaría de
+   funcionar en cuanto YouTube cambie.
+
+   **Por qué no la vía Termux** (`targetSdk 28`): Termux tampoco ejecuta un yt-dlp
+   autocontenido —su `yt-dlp` es código Python que corre con el Python de Termux—,
+   y no existe un yt-dlp de binario único para Bionic (los `yt-dlp_linux_aarch64`
+   oficiales son glibc). Incluso bajando el `targetSdk` habría que llevar un
+   intérprete, y a cambio se perdería Play y se dependería de ejecutar desde un
+   directorio escribible. Se descarta: cuesta más y da menos.
+
+   Lo que esto le pide al código (fase C):
+
+   - Motores conscientes de Android: `python`, `ffmpeg` y `quickjs` desde
+     `nativeLibraryDir`; yt-dlp desde el directorio de datos (o el del APK).
+   - La invocación deja de ser «un binario»: pasa a ser un prefijo
+     (`<python> <zipapp>`) más los mismos argumentos de siempre. `common_args` ya
+     añade `--ffmpeg-location` cuando ffmpeg no viene del `PATH`, así que apuntar al
+     del APK es casi gratis.
+   - El actualizador gana un caso `android` que **sí** tiene sentido: no descargar
+     un binario, sino el *zipapp* de yt-dlp.
+   - `#[cfg(target_os = "android")]` **no se compila en Linux**: todo esto hay que
+     comprobarlo en CI con el objetivo `aarch64-linux-android` activado
+     (`cargo check --target aarch64-linux-android`), o el compilador no lo verá
+     hasta que exista un dispositivo delante.
 
 ## 6. Cómo probar sin dispositivo
 
