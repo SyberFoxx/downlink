@@ -7,20 +7,21 @@ fases. Las referencias son del árbol en v0.10.0 (`archivo:línea`).
 - **Fuera de alcance**: **iOS**. La arquitectura de Downlink se apoya en lanzar
   `yt-dlp` y `ffmpeg` como **procesos externos**, y iOS no permite crear
   procesos hijos desde una app. No es un problema de esfuerzo, es de plataforma.
-- **Estado**: fase A (interfaz móvil) casi lista: el armazón ya está adaptado y
-  medido en navegador, y los enlaces compartidos desde otras apps ya se reciben y
-  se tratan (falta el puente nativo, que llega con el andamiaje). Quedan los
-  **gestos** para reordenar la cola; después, el andamiaje Android y el motor
-  nativo. La duda de fondo —cómo ejecutar el motor— ya está decidida: los
-  intérpretes van dentro del APK y yt-dlp se pone al día solo (5.4).
+- **Estado**: fases A y B encaminadas. El armazón móvil está adaptado y medido en
+  navegador; los enlaces compartidos desde otras apps se reciben **de punta a punta**
+  (menú «Compartir» → `MainActivity` → JNI → `SharedLink` → interfaz) y la app ya
+  **construye un APK instalable** (ver 7). Quedan los **gestos** para reordenar la
+  cola, el destino de descargas por SAF y, sobre todo, los **motores nativos**. La
+  duda de fondo —cómo ejecutar el motor— ya está decidida: los intérpretes van dentro
+  del APK y yt-dlp se pone al día solo (5.4).
 
 ## Resumen
 
 | | |
 |---|---|
-| **Bloqueantes** | Ejecutar el motor (W^X: **resuelto** en 5.4), acceso al almacenamiento (SAF), scaffold Android inexistente |
+| **Bloqueantes** | Ejecutar el motor (W^X: **resuelto** en 5.4; falta empaquetarlo), acceso al almacenamiento (SAF) |
 | **A adaptar** | UI táctil, ventana, bandeja/notificaciones, cookies/navegadores, pywal/fondo, "mostrar en carpeta", CI |
-| **Ya preparado** | Tokens de tema, cola/historial/persistencia, TLS rustls, plugins, iconos Android, frontend estático |
+| **Ya preparado** | Tokens de tema, cola/historial/persistencia, TLS rustls, plugins, iconos Android, frontend estático, andamiaje Android y *share intent* |
 
 La buena noticia: la app está bien separada. **El sistema de temas, el estado y
 la persistencia no se tocan**; lo que falta es la capa de interfaz y el
@@ -88,9 +89,10 @@ Android usa **almacenamiento por alcance**: no se puede escribir en rutas
 arbitrarias ni usar `content://` como `current_dir`. Hace falta **SAF/MediaStore**
 para el destino final y un directorio privado para el `.part` y el procesado.
 
-### 1.3. Scaffold Android inexistente
+### 1.3. Scaffold Android (ya existe)
 
-- No existe `src-tauri/gen/android` (solo `src-tauri/gen/schemas/`).
+- `src-tauri/gen/android` está generado (`tauri android init`) y el primer APK se
+  construye y firma (ver 7). Lo que falta de aquí:
 - `src-tauri/capabilities/default.json:2` — la capability usa
   `desktop-schema.json`; hay que crear una de móvil (`mobile-schema`).
 - `src-tauri/tauri.conf.json:30` — `bundle.targets: "all"`, sin sección Android.
@@ -200,25 +202,25 @@ de Android, ver 6):
   pendiente (`take_shared_text`). Las entregas repetidas del mismo texto en menos
   de dos segundos se descartan.
 
-Lo que falta, y necesita el andamiaje (fase B) y un dispositivo:
+El puente nativo ya está hecho (fase B):
 
-- `AndroidManifest.xml`, en la actividad principal:
-  ```xml
-  <intent-filter>
-    <action android:name="android.intent.action.SEND" />
-    <category android:name="android.intent.category.DEFAULT" />
-    <data android:mimeType="text/plain" />
-  </intent-filter>
-  ```
-  Con esto Downlink aparece en el menú «Compartir» de cualquier app (YouTube,
-  Instagram, Chrome, TikTok…), que es el objetivo.
-- `launchMode="singleTask"` y leer el enlace en `onCreate` **y** en
-  `onNewIntent`: si la app ya estaba abierta, Android no la vuelve a crear y el
-  enlace llega por el segundo.
-- El caso normal es el **frío**: al compartir, Android arranca la app, así que el
-  texto existe mucho antes que la webview. Por eso se guarda en `SharedLink` y la
-  interfaz lo pide al montar; el evento queda para cuando ya está en marcha.
+- `AndroidManifest.xml`: filtro `SEND` + `text/plain`, así que Downlink aparece en
+  el menú «Compartir» de cualquier app (YouTube, Instagram, Chrome, TikTok…), que
+  era el objetivo. `launchMode="singleTask"` ya lo traía la plantilla.
+- `MainActivity.kt` lee el enlace en `onCreate` (el caso normal al compartir es el
+  arranque en frío) **y** en `onNewIntent` (si Downlink ya estaba abierto), y
+  acepta `EXTRA_TEXT` o, si no viene ahí, `ClipData`, que es por donde lo mandan
+  unas pocas apps.
+- `src-tauri/src/share.rs` recibe ese texto por JNI
+  (`Java_com_ramses_downlink_MainActivity_pushSharedText`), lo guarda en
+  `SharedLink` y emite `share-intent`. Es la única vía que no pasa por la webview,
+  que en frío todavía no existe.
 - Varios enlaces compartidos de una vez van todos a la cola, igual que al pegarlos.
+
+Falta probarlo en un dispositivo. Y hasta la fase C (motores) compartir un enlace
+llega, pero no puede descargar: el aviso lo dice tal cual —«Esta versión para Android
+todavía no incluye el motor de descarga»— en vez de un error del sistema que
+parecería una avería.
 
 ### 2.8. CI
 
@@ -286,18 +288,17 @@ navegador real a 390×844.
       previa. Verificado en navegador simulando el WebView de Android, incluido el
       arranque desde cero (el enlace espera al otro lado y la app lo recoge).
 - [ ] Reordenar la cola con **gestos** (Pointer Events) en vez de HTML5 drag & drop.
-- [ ] Puente nativo del *share intent* (`intent-filter` y plugin Android). El lado
-      de la app ya está hecho y probado: ver 2.7 y fase B.
+- [x] Puente nativo del *share intent* (`intent-filter` + JNI). Ver 2.7.
 
 ### Fase B — Andamiaje Android
 
-- [ ] `tauri android init` (crea `src-tauri/gen/android`).
-- [ ] `intent-filter` de `ACTION_SEND` (`text/plain`) en la actividad principal,
-      `launchMode="singleTask"`, y leer `EXTRA_TEXT`/`EXTRA_HTML_TEXT` en
-      `onCreate` y en `onNewIntent`; el plugin entrega el texto a
-      `SharedLink::push` (`src-tauri/src/lib.rs`) y emite `share-intent`. El lado
-      de la app ya está hecho y probado (ver 2.8).
-- [ ] `minSdk`/`targetSdk` y permisos (INTERNET, FOREGROUND_SERVICE, POST_NOTIFICATIONS).
+- [x] `tauri android init` (crea `src-tauri/gen/android`) y primer APK.
+- [x] `intent-filter` de `ACTION_SEND` (`text/plain`) con `launchMode="singleTask"`
+      y puente JNI hasta `SharedLink` (ver 2.7). El enlace viaja en `EXTRA_TEXT`
+      —`EXTRA_HTML_TEXT` no hace falta— y `MainActivity` lo lee en `onCreate` y en
+      `onNewIntent`.
+- [ ] Permisos que faltan para lo que viene: `FOREGROUND_SERVICE` y
+      `POST_NOTIFICATIONS` (fase E). `INTERNET` ya lo declara la plantilla.
 - [ ] Capability de móvil (`mobile-schema`).
 - [ ] Configuración de ventana condicional (`tauri.conf.json:18-19`).
 - [ ] Job de CI para APK/AAB.
@@ -452,3 +453,37 @@ usuario al del WebView de Android (la app lo mira para saber dónde corre), el
 `share-intent` como haría Rust. Así se comprueban las dos vías —app cerrada (el
 enlace espera) y app abierta (llega el evento)—, el ajuste de Ajustes y el
 resultado en pantalla, con el texto real que manda cada app.
+
+## 7. Compilar el APK
+
+No hace falta Android Studio: con el SDK, el NDK y un JDK 17 —los tres ya
+instalados en esta máquina— basta, más el *std* de Rust para Android
+(`rustup target add aarch64-linux-android`). Los detalles que costaron un rato:
+
+- `JAVA_HOME` tiene que apuntar a un JDK 17 **completo**:
+  `/usr/lib/jvm/java-21-openjdk` existe pero está vacío, sin `bin/java`.
+- `compileSdk`/`targetSdk` son 37; si la plataforma no está, Gradle la descarga.
+- El NDK 28.2 ya alinea a páginas de 16 KB (requisito de Play), sin flags extra.
+
+```sh
+export ANDROID_HOME="$HOME/Android/sdk" ANDROID_SDK_ROOT="$HOME/Android/sdk" \
+       NDK_HOME="$HOME/Android/sdk/ndk/28.2.13676358" \
+       JAVA_HOME=/usr/lib/jvm/java-17-temurin-jdk
+npx tauri android build --debug --apk --target aarch64
+```
+
+El APK queda en
+`src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`
+y va firmado con la clave de depuración, así que se instala tal cual. **Ojo con el
+tamaño**: en depuración la librería lleva los símbolos y el APK ronda los 400 MB;
+con `CARGO_PROFILE_DEV_DEBUG=0` en el entorno baja a lo razonable. Una compilación
+de publicación lo deja en su sitio de verdad, pero exige configurar la firma (fase
+F).
+
+Para comprobar el código `#[cfg(target_os = "android")]`, que en Linux no se compila
+—y por tanto no lo ve ni `cargo check` ni Clippy—, sirve el mismo target con el
+compilador del NDK en el `PATH`:
+
+```sh
+cargo check --target aarch64-linux-android
+```

@@ -33,6 +33,11 @@ tar = "0.4"
 lzma-rs = "0.3"
 zip = { version = "6", default-features = false, features = ["deflate"] }
 
+# El texto que comparte otra app entra por JNI desde `MainActivity` (ver
+# `src/share.rs`): es la única vía antes de que exista la webview.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
