@@ -60,10 +60,27 @@ export function parseTimecode(value: string): number | null {
 }
 
 export const VIDEO_CONTAINERS = [
-  { id: "mp4", label: "MP4 — máxima compatibilidad" },
+  { id: "mp4", label: "MP4 — máxima compatibilidad (hasta 1080p)" },
   { id: "mkv", label: "MKV — mejor calidad de códecs" },
   { id: "webm", label: "WEBM — VP9/AV1" },
 ];
+
+/**
+ * Highest resolution MP4 keeps without losing quality. In MP4 the backend asks
+ * for H.264 + AAC, and H.264 stops at 1080p, so 1440p+ would come out as 1080p.
+ * Mirrors `MAX_MP4_HEIGHT` in `src-tauri/src/ytdlp.rs`.
+ */
+export const MAX_MP4_HEIGHT = 1080;
+
+/** Container actually used: above the MP4 limit (or "best") MKV is used. */
+export function effectiveContainer(options: DownloadOptions): string | null {
+  const tooBigForMp4 =
+    options.videoHeight == null || options.videoHeight > MAX_MP4_HEIGHT;
+  if (options.mode === "video" && options.container === "mp4" && tooBigForMp4) {
+    return "mkv";
+  }
+  return options.container;
+}
 
 export const AUDIO_FORMATS = [
   { id: "mp3", label: "MP3" },
@@ -204,7 +221,7 @@ export function summarizeOptions(options: DownloadOptions): string {
         : format,
     );
   } else {
-    const container = (options.container ?? "auto").toUpperCase();
+    const container = (effectiveContainer(options) ?? "auto").toUpperCase();
     parts.push(
       `${options.videoHeight ? `${options.videoHeight}p` : "Mejor"} · ${container}`,
     );

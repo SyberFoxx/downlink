@@ -308,6 +308,27 @@ fn timecode(seconds: f64) -> String {
     )
 }
 
+/// Highest resolution MP4 can keep without losing quality.
+///
+/// MP4 asks for H.264 + AAC (see `build_download_args`) and YouTube stops
+/// publishing H.264 above 1080p, so 1440p/2160p in MP4 silently ends up as
+/// 1080p. Above this limit (or asking for "best") MKV keeps the original codec.
+pub const MAX_MP4_HEIGHT: u32 = 1080;
+
+/// Container actually used, with the MP4 resolution limit applied.
+pub fn effective_container(options: &DownloadOptions) -> Option<&str> {
+    let container = options.container.as_deref();
+    let too_big_for_mp4 = options.mode == MediaMode::Video
+        && options
+            .video_height
+            .is_none_or(|height| height > MAX_MP4_HEIGHT);
+    if container == Some("mp4") && too_big_for_mp4 {
+        Some("mkv")
+    } else {
+        container
+    }
+}
+
 /// Cadena de selección de formato (`-f`) para video.
 fn video_format(height: Option<u32>, container: Option<&str>) -> String {
     let limit = height.map(|h| format!("[height<={h}]")).unwrap_or_default();
@@ -383,12 +404,12 @@ pub fn build_download_args(
 
     match options.mode {
         MediaMode::Video => {
-            let container = options.container.as_deref();
+            let container = effective_container(options);
             args.push("-f".into());
             args.push(video_format(options.video_height, container));
 
             if container == Some("mp4") {
-                // Compatibilidad con reproductores: preferir H.264 + AAC en MP4.
+                // Compatibility first: MP4 only carries H.264 + AAC here.
                 args.push("-S".into());
                 args.push("vcodec:h264,acodec:aac".into());
             }
@@ -1100,6 +1121,66 @@ mod tests {
         assert!(args.iter().any(|a| a == "--embed-metadata"));
         assert!(args.iter().any(|a| a == "--embed-thumbnail"));
         assert!(!args.iter().any(|a| a == "--recode-video"));
+    }
+
+    #[test]
+    fn mp4_por_encima_de_1080p_pasa_a_mkv() {
+        // 1440p+ (o "mejor") en MP4 se quedaría en 1080p por culpa de H.264.
+        for height in [Some(1440), Some(2160), None] {
+            let options = DownloadOptions {
+                mode: MediaMode::Video,
+                video_height: height,
+                container: Some("mp4".into()),
+                ..Default::default()
+            };
+            let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+            assert!(
+                args.windows(2)
+                    .any(|w| w == ["--merge-output-format", "mkv"]),
+                "altura {height:?}: {args:?}"
+            );
+            assert!(!args.iter().any(|a| a == "-S"), "altura {height:?}");
+        }
+    }
+
+    #[test]
+    fn mkv_y_webm_ignoran_el_limite_de_mp4() {
+        let en_4k = |container: &str| DownloadOptions {
+            mode: MediaMode::Video,
+            video_height: Some(2160),
+            container: Some(container.into()),
+            ..Default::default()
+        };
+
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &en_4k("mkv"));
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--merge-output-format", "mkv"])
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["-f", "bv*[height<=2160]+ba/b[height<=2160]"])
+        );
+
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &en_4k("webm"));
+        assert!(
+            args.windows(2)
+                .any(|w| w == ["--merge-output-format", "webm"])
+        );
+    }
+
+    #[test]
+    fn el_limite_de_mp4_no_toca_el_audio() {
+        let options = DownloadOptions {
+            mode: MediaMode::Audio,
+            video_height: Some(2160),
+            container: Some("mp4".into()),
+            audio_format: Some("mp3".into()),
+            ..Default::default()
+        };
+        let args = build_download_args(&no_cookies(), "https://vimeo.com/1", &options);
+        assert!(args.iter().any(|a| a == "-x"));
+        assert!(!args.iter().any(|a| a == "--merge-output-format"));
     }
 
     #[test]
