@@ -69,6 +69,10 @@ pub struct JobView {
     pub eta_secs: Option<u64>,
     pub file_path: Option<String>,
     pub message: Option<String>,
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub stream: Option<String>,
 }
 
 impl JobView {
@@ -93,6 +97,8 @@ impl JobView {
             eta_secs: None,
             file_path: None,
             message: None,
+            phase: None,
+            stream: None,
         }
     }
 }
@@ -105,6 +111,8 @@ struct Inner {
     next_id: u64,
     concurrency: usize,
     last_emit: Option<Instant>,
+    /// Aggregates progress across multiple streams (video + audio).
+    meters: HashMap<u64, ytdlp::ProgressMeter>,
 }
 
 /// Gestor de la cola de descargas.
@@ -171,6 +179,8 @@ fn requeue_finished(jobs: &mut [JobView], id: u64) -> bool {
     job.eta_secs = None;
     job.file_path = None;
     job.message = None;
+    job.phase = None;
+    job.stream = None;
     true
 }
 
@@ -193,6 +203,8 @@ fn restorable_jobs(jobs: &[JobView]) -> Vec<JobView> {
             view.eta_secs = None;
             view.file_path = None;
             view.message = None;
+            view.phase = None;
+            view.stream = None;
             view
         })
         .collect()
@@ -201,6 +213,18 @@ fn restorable_jobs(jobs: &[JobView]) -> Vec<JobView> {
 /// Siguiente id libre: el mayor de los trabajos restaurados o el guardado.
 fn next_id_from(jobs: &[JobView], stored: u64) -> u64 {
     jobs.iter().map(|job| job.id).max().unwrap_or(0).max(stored)
+}
+
+/// Sanity check for a finished download: the file must be where yt-dlp said.
+/// Returns the message to show when it is not, or `None` when all is well.
+fn missing_output(path: &str) -> Option<String> {
+    if std::path::Path::new(path).is_file() {
+        return None;
+    }
+    Some(format!(
+        "La descarga terminó, pero el archivo no está en «{path}». \
+         Comprueba la carpeta de descargas y vuelve a intentarlo."
+    ))
 }
 
 impl Queue {
@@ -212,6 +236,7 @@ impl Queue {
                 next_id: 0,
                 concurrency: concurrency.clamp(1, 8),
                 last_emit: None,
+                meters: HashMap::new(),
             }),
             app,
         }
@@ -260,6 +285,8 @@ impl Queue {
             job.status = JobStatus::Paused;
             job.speed_bps = None;
             job.eta_secs = None;
+            job.phase = None;
+            job.stream = None;
             if let Some(child) = inner.running.get_mut(&id) {
                 let _ = child.start_kill();
             }
@@ -298,11 +325,14 @@ impl Queue {
                     return;
                 }
                 inner.jobs.remove(pos);
+                inner.meters.remove(&id);
             } else {
                 let job = &mut inner.jobs[pos];
                 job.status = JobStatus::Cancelled;
                 job.speed_bps = None;
                 job.eta_secs = None;
+                job.phase = None;
+                job.stream = None;
                 if let Some(child) = inner.running.get_mut(&id) {
                     let _ = child.start_kill();
                 }
@@ -321,6 +351,7 @@ impl Queue {
                 return;
             }
             requeue_finished(&mut inner.jobs, id);
+            inner.meters.remove(&id);
         }
         self.pump(settings.clone()).await;
     }
@@ -343,6 +374,8 @@ impl Queue {
             let mut inner = self.inner.lock().await;
             let before = inner.jobs.len();
             inner.jobs.retain(|j| !j.status.is_finished());
+            let alive: std::collections::HashSet<u64> = inner.jobs.iter().map(|j| j.id).collect();
+            inner.meters.retain(|id, _| alive.contains(id));
             if inner.jobs.len() == before {
                 return;
             }
@@ -382,12 +415,16 @@ impl Queue {
                     Ok((child, stdout, stderr)) => {
                         inner.jobs[pos].status = JobStatus::Downloading;
                         inner.jobs[pos].message = None;
+                        inner.jobs[pos].phase = None;
+                        inner.jobs[pos].stream = None;
+                        inner.meters.insert(id, ytdlp::ProgressMeter::default());
                         inner.running.insert(id, child);
                         runners.push((id, stdout, stderr));
                     }
                     Err(error) => {
                         inner.jobs[pos].status = JobStatus::Error;
                         inner.jobs[pos].message = Some(error);
+                        inner.meters.remove(&id);
                     }
                 }
             }
@@ -421,8 +458,11 @@ impl Queue {
             while let Ok(Some(line)) = lines.next_line().await {
                 match ytdlp::parse_line(&line) {
                     Some(ytdlp::LineEvent::Progress(tick)) => self.update_progress(id, tick).await,
+                    Some(ytdlp::LineEvent::Plan(total)) => self.set_plan(id, total).await,
                     Some(ytdlp::LineEvent::File(path)) => final_path = Some(path),
-                    Some(ytdlp::LineEvent::Phase(_)) => self.set_processing(id).await,
+                    Some(ytdlp::LineEvent::Phase(name)) => {
+                        self.set_processing(id, Some(name)).await
+                    }
                     None => {}
                 }
             }
@@ -433,21 +473,40 @@ impl Queue {
         });
     }
 
+    /// Keeps the total size yt-dlp announces before starting (video + audio).
+    async fn set_plan(&self, id: u64, total: u64) {
+        let mut inner = self.inner.lock().await;
+        inner.meters.entry(id).or_default().plan(total);
+    }
+
     async fn update_progress(&self, id: u64, tick: ytdlp::ProgressTick) {
         let should_emit = {
             let mut inner = self.inner.lock().await;
+
+            // Aggregate first (video + audio are two separate downloads), then
+            // look up the job: keeping both borrows apart pleases the checker.
+            let (aggregated, stream) = {
+                let meter = inner.meters.entry(id).or_default();
+                (meter.feed(tick), meter.stream_label().map(str::to_string))
+            };
+
             let Some(job) = inner.jobs.iter_mut().find(|j| j.id == id) else {
                 return;
             };
             if job.status.is_finished() || job.status == JobStatus::Paused {
                 return;
             }
-            job.status = JobStatus::Downloading;
-            job.percent = tick.percent;
-            job.downloaded_bytes = tick.downloaded_bytes;
-            job.total_bytes = tick.total_bytes;
-            job.speed_bps = tick.speed_bps;
-            job.eta_secs = tick.eta_secs;
+            // A late progress line must not undo the postprocessing state.
+            if job.status != JobStatus::Processing {
+                job.status = JobStatus::Downloading;
+            }
+            job.percent = aggregated.percent;
+            job.downloaded_bytes = aggregated.downloaded_bytes;
+            job.total_bytes = aggregated.total_bytes;
+            job.speed_bps = aggregated.speed_bps;
+            job.eta_secs = aggregated.eta_secs;
+            job.stream = stream;
+            job.phase = None;
 
             let now = Instant::now();
             match inner.last_emit {
@@ -463,19 +522,18 @@ impl Queue {
         }
     }
 
-    async fn set_processing(&self, id: u64) {
+    async fn set_processing(&self, id: u64, phase: Option<String>) {
         let changed = {
             let mut inner = self.inner.lock().await;
             match inner.jobs.iter_mut().find(|j| j.id == id) {
-                Some(job)
-                    if !job.status.is_finished()
-                        && job.status != JobStatus::Paused
-                        && job.status != JobStatus::Processing =>
-                {
+                Some(job) if !job.status.is_finished() && job.status != JobStatus::Paused => {
                     job.status = JobStatus::Processing;
                     job.percent = Some(100.0);
                     job.speed_bps = None;
                     job.eta_secs = None;
+                    job.stream = None;
+                    // Later phases (merge, metadata, thumbnail…) refresh the label.
+                    job.phase = phase;
                     true
                 }
                 _ => false,
@@ -492,6 +550,7 @@ impl Queue {
         let (mut child, previous) = {
             let mut inner = self.inner.lock().await;
             let child = inner.running.remove(&id);
+            inner.meters.remove(&id);
             let status = inner.jobs.iter().find(|j| j.id == id).map(|j| j.status);
             (child, status)
         };
@@ -516,24 +575,45 @@ impl Queue {
             ) {
                 // El comando de pausa/cancelación ya fijó el estado; solo liberamos el slot.
             } else if success {
-                job.status = JobStatus::Done;
-                job.percent = Some(100.0);
+                // The download is only done if the file yt-dlp reported is there.
+                match final_path.as_deref().and_then(missing_output) {
+                    Some(problem) => {
+                        job.status = JobStatus::Error;
+                        job.message = Some(problem);
+                        notify_info = Some((job.title.clone(), false));
+                    }
+                    None => {
+                        job.status = JobStatus::Done;
+                        job.percent = Some(100.0);
+                        job.file_path = final_path;
+                        if job.file_path.is_none() {
+                            job.message = Some(
+                                "La descarga terminó, pero yt-dlp no indicó la ruta del archivo. \
+                                 Revisa la carpeta de descargas."
+                                    .to_string(),
+                            );
+                        }
+                        let file_path = job.file_path.clone();
+                        completed = Some(HistoryEntry::new(
+                            job.url.clone(),
+                            job.title.clone(),
+                            job.thumbnail.clone(),
+                            file_path,
+                            job.options.clone(),
+                        ));
+                        notify_info = Some((job.title.clone(), true));
+                    }
+                }
                 job.speed_bps = None;
                 job.eta_secs = None;
-                job.file_path = final_path;
-                let file_path = job.file_path.clone();
-                completed = Some(HistoryEntry::new(
-                    job.url.clone(),
-                    job.title.clone(),
-                    job.thumbnail.clone(),
-                    file_path,
-                    job.options.clone(),
-                ));
-                notify_info = Some((job.title.clone(), true));
+                job.phase = None;
+                job.stream = None;
             } else {
                 job.status = JobStatus::Error;
                 job.speed_bps = None;
                 job.eta_secs = None;
+                job.phase = None;
+                job.stream = None;
                 job.message = Some(ytdlp::friendly_error(stderr_text));
                 notify_info = Some((job.title.clone(), false));
             }

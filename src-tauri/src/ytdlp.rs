@@ -8,7 +8,10 @@ use tokio::process::{Child, ChildStderr, ChildStdout};
 use crate::engine;
 use crate::settings::{CookiesMode, EngineInfo, Settings};
 
-const PROGRESS_TEMPLATE: &str = "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s";
+const PROGRESS_TEMPLATE: &str = "download:__DL__%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s|%(info.vcodec)s";
+/// `before_dl` is printed once per job and `filesize` is already the sum of the
+/// requested formats, so a merge gives the real total before it starts.
+const PLAN_TEMPLATE: &str = "before_dl:__PLAN__%(filesize,filesize_approx)s";
 const FILE_TEMPLATE: &str = "after_move:__FILE__%(filepath)s";
 const JS_RUNTIMES: [(&str, &str); 4] = [
     ("deno", "deno"),
@@ -349,10 +352,15 @@ pub fn build_download_args(
     args.extend([
         "--no-playlist".into(),
         "--no-warnings".into(),
+        // `--print` implies `--quiet`, which would hide the postprocessor
+        // markers (`[Merger]`, `[Metadata]`…) used to show "Processing".
+        "--no-quiet".into(),
         "--newline".into(),
         "--progress".into(),
         "--progress-template".into(),
         PROGRESS_TEMPLATE.into(),
+        "--print".into(),
+        PLAN_TEMPLATE.into(),
         "--print".into(),
         FILE_TEMPLATE.into(),
         "--output".into(),
@@ -726,6 +734,27 @@ fn available_heights(json: &serde_json::Value) -> Vec<u32> {
 // Proceso de descarga
 // ---------------------------------------------------------------------------
 
+/// Which stream a progress line belongs to. yt-dlp downloads the video and the
+/// audio as separate files and counts each one from zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StreamKind {
+    Video,
+    Audio,
+    #[default]
+    Unknown,
+}
+
+impl StreamKind {
+    /// Audio-only formats report `vcodec = none`; `NA`/empty mean "no idea".
+    fn from_vcodec(raw: &str) -> Self {
+        match raw.trim() {
+            "none" => Self::Audio,
+            "" | "NA" => Self::Unknown,
+            _ => Self::Video,
+        }
+    }
+}
+
 /// Un tick de progreso del protocolo `__DL__`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProgressTick {
@@ -734,14 +763,89 @@ pub struct ProgressTick {
     pub speed_bps: Option<f64>,
     pub eta_secs: Option<u64>,
     pub percent: Option<f64>,
+    pub stream: StreamKind,
 }
 
 /// Evento interpretado de una línea de la salida de yt-dlp.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LineEvent {
     Progress(ProgressTick),
+    /// Total size of the whole job, before it starts (video + audio).
+    Plan(u64),
     File(String),
     Phase(String),
+}
+
+/// Adds up the streams of one download. yt-dlp fetches the video and the audio
+/// as two separate files and restarts the counter for each one, which used to
+/// make the bar jump from 100% back to 0% halfway through.
+#[derive(Debug, Default)]
+pub struct ProgressMeter {
+    /// Bytes of the streams already finished (everything before this stream).
+    banked_bytes: u64,
+    last_downloaded: u64,
+    last_total: Option<u64>,
+    /// Streams already seen (`> 0` means there was at least one before).
+    streams: u32,
+    kind: StreamKind,
+    /// Size of the whole job, when yt-dlp announced it up front.
+    planned: Option<u64>,
+}
+
+impl ProgressMeter {
+    /// Total size of the job (video + audio), announced before downloading.
+    pub fn plan(&mut self, total: u64) {
+        self.planned = Some(total);
+    }
+
+    /// Feeds one tick and returns it with the totals of the whole job.
+    pub fn feed(&mut self, tick: ProgressTick) -> ProgressTick {
+        let downloaded = tick.downloaded_bytes.unwrap_or(0);
+        if downloaded < self.last_downloaded {
+            // The counter went back to zero: the previous stream is done.
+            self.banked_bytes += self.last_total.unwrap_or(self.last_downloaded);
+            self.streams += 1;
+        }
+        self.last_downloaded = downloaded;
+        self.last_total = tick.total_bytes;
+        self.kind = tick.stream;
+
+        let all = self
+            .planned
+            .or(tick.total_bytes.map(|stream| self.banked_bytes + stream));
+        let done = self.banked_bytes + downloaded;
+        let done = all.map_or(done, |all| done.min(all));
+        let percent = match all {
+            Some(all) if all > 0 => Some((done as f64 / all as f64 * 100.0).min(100.0)),
+            _ => None,
+        };
+        let eta_secs = match (all, tick.speed_bps) {
+            (Some(all), Some(speed)) if speed > 0.0 && all > done => {
+                Some(((all - done) as f64 / speed) as u64)
+            }
+            _ => tick.eta_secs,
+        };
+
+        ProgressTick {
+            downloaded_bytes: Some(done),
+            total_bytes: all,
+            speed_bps: tick.speed_bps,
+            eta_secs,
+            percent,
+            stream: tick.stream,
+        }
+    }
+
+    /// Stream being downloaded, for the row label. The ordinal is a fallback
+    /// when yt-dlp does not report the codec: the audio comes second.
+    pub fn stream_label(&self) -> Option<&'static str> {
+        match self.kind {
+            StreamKind::Video => Some("video"),
+            StreamKind::Audio => Some("audio"),
+            StreamKind::Unknown if self.streams > 0 => Some("audio"),
+            StreamKind::Unknown => None,
+        }
+    }
 }
 
 /// Postprocesadores cuyo inicio se muestra como «Procesando» en la cola.
@@ -761,13 +865,19 @@ const PHASE_MARKERS: [&str; 9] = [
 pub fn parse_line(line: &str) -> Option<LineEvent> {
     if let Some(rest) = line.strip_prefix("__DL__") {
         let parts: Vec<&str> = rest.split('|').collect();
-        if parts.len() == 5 {
+        if parts.len() >= 5 {
             return Some(LineEvent::Progress(progress_tick(&parts)));
         }
         return None;
     }
     if let Some(path) = line.strip_prefix("__FILE__") {
         return Some(LineEvent::File(path.trim().to_string()));
+    }
+    if let Some(raw) = line.strip_prefix("__PLAN__")
+        && let Some(total) = opt_f64(raw).map(|v| v as u64)
+        && total > 0
+    {
+        return Some(LineEvent::Plan(total));
     }
     if let Some(marker) = PHASE_MARKERS.iter().find(|m| line.starts_with(**m)) {
         let name = marker.trim_start_matches('[').trim_end_matches(']');
@@ -801,12 +911,18 @@ fn progress_tick(parts: &[&str]) -> ProgressTick {
                 _ => None,
             });
 
+    let stream = parts
+        .get(5)
+        .map(|s| StreamKind::from_vcodec(s))
+        .unwrap_or_default();
+
     ProgressTick {
         downloaded_bytes: downloaded,
         total_bytes: total,
         speed_bps,
         eta_secs,
         percent,
+        stream,
     }
 }
 
@@ -1544,8 +1660,8 @@ mod tests {
 
     #[test]
     fn interpreta_lineas_de_progreso() {
-        // downloaded | total | total_estimate | speed | eta
-        let event = parse_line("__DL__1000|4000|NA|524288.0|12");
+        // downloaded | total | total_estimate | speed | eta | vcodec
+        let event = parse_line("__DL__1000|4000|NA|524288.0|12|vp9");
         assert_eq!(
             event,
             Some(LineEvent::Progress(ProgressTick {
@@ -1554,6 +1670,7 @@ mod tests {
                 speed_bps: Some(524288.0),
                 eta_secs: Some(12),
                 percent: Some(25.0),
+                stream: StreamKind::Video,
             }))
         );
     }
@@ -1561,7 +1678,7 @@ mod tests {
     #[test]
     fn calcula_porcentaje_y_eta_si_faltan() {
         // Sin total real pero con estimación, y sin eta (se calcula con la velocidad).
-        let event = parse_line("__DL__1000|NA|4000|1000.0|NA");
+        let event = parse_line("__DL__1000|NA|4000|1000.0|NA|none");
         assert_eq!(
             event,
             Some(LineEvent::Progress(ProgressTick {
@@ -1570,6 +1687,7 @@ mod tests {
                 speed_bps: Some(1000.0),
                 eta_secs: Some(3),
                 percent: Some(25.0),
+                stream: StreamKind::Audio,
             }))
         );
     }
@@ -1585,6 +1703,7 @@ mod tests {
                 speed_bps: None,
                 eta_secs: None,
                 percent: None,
+                stream: StreamKind::Unknown,
             }))
         );
     }
@@ -1595,6 +1714,138 @@ mod tests {
             parse_line("__FILE__/home/user/video.mp4"),
             Some(LineEvent::File("/home/user/video.mp4".to_string()))
         );
+    }
+
+    fn tick(done: u64, total: Option<u64>, stream: StreamKind) -> ProgressTick {
+        ProgressTick {
+            downloaded_bytes: Some(done),
+            total_bytes: total,
+            speed_bps: None,
+            eta_secs: None,
+            percent: None,
+            stream,
+        }
+    }
+
+    #[test]
+    fn interpreta_el_total_anunciado() {
+        assert_eq!(parse_line("__PLAN__475961"), Some(LineEvent::Plan(475961)));
+        assert_eq!(parse_line("__PLAN__NA"), None);
+        assert_eq!(parse_line("__PLAN__0"), None);
+    }
+
+    #[test]
+    fn el_medidor_suma_los_dos_streams() {
+        let mut meter = ProgressMeter::default();
+
+        // Video: 0 → 4000 de 4000.
+        assert_eq!(
+            meter
+                .feed(tick(2000, Some(4000), StreamKind::Video))
+                .percent,
+            Some(50.0)
+        );
+        let end = meter.feed(tick(4000, Some(4000), StreamKind::Video));
+        assert_eq!(end.percent, Some(100.0));
+
+        // Audio: el contador vuelve a cero, pero lo anterior ya está guardado.
+        let start = meter.feed(tick(0, Some(1000), StreamKind::Audio));
+        assert_eq!(start.percent, Some(80.0), "no debe volver al 0 %");
+        assert_eq!(start.downloaded_bytes, Some(4000));
+
+        let end = meter.feed(tick(1000, Some(1000), StreamKind::Audio));
+        assert_eq!(end.percent, Some(100.0));
+        assert_eq!(end.total_bytes, Some(5000));
+        assert_eq!(end.downloaded_bytes, Some(5000));
+    }
+
+    #[test]
+    fn el_medidor_usa_el_total_anunciado() {
+        let mut meter = ProgressMeter::default();
+        meter.plan(5000);
+
+        let mut percents = vec![];
+        for (done, total) in [(1000, 4000), (4000, 4000)] {
+            percents.push(
+                meter
+                    .feed(tick(done, Some(total), StreamKind::Video))
+                    .percent,
+            );
+        }
+        // El audio empieza y la barra sigue donde iba, sin bajar.
+        percents.push(meter.feed(tick(0, Some(1000), StreamKind::Audio)).percent);
+        percents.push(
+            meter
+                .feed(tick(1000, Some(1000), StreamKind::Audio))
+                .percent,
+        );
+
+        assert_eq!(
+            percents,
+            vec![Some(20.0), Some(80.0), Some(80.0), Some(100.0)]
+        );
+    }
+
+    #[test]
+    fn el_medidor_etiqueta_el_stream_que_baja() {
+        let mut meter = ProgressMeter::default();
+        assert_eq!(meter.stream_label(), None);
+        meter.feed(tick(100, Some(4000), StreamKind::Video));
+        assert_eq!(meter.stream_label(), Some("video"));
+        meter.feed(tick(0, Some(1000), StreamKind::Audio));
+        assert_eq!(meter.stream_label(), Some("audio"));
+
+        // Sin códec reportado, el segundo stream se supone audio.
+        let mut meter = ProgressMeter::default();
+        meter.feed(tick(4000, Some(4000), StreamKind::Unknown));
+        assert_eq!(meter.stream_label(), None);
+        meter.feed(tick(0, Some(1000), StreamKind::Unknown));
+        assert_eq!(meter.stream_label(), Some("audio"));
+    }
+
+    /// Salida real de yt-dlp (recortada) de una descarga 240p con mezcla a MKV:
+    /// plan, video de 223779 B, audio de 252182 B, fases y ruta final.
+    const SALIDA_REAL: [&str; 8] = [
+        "__PLAN__475961",
+        "__DL__1024|223779|NA|NA|NA|av01.0.00M.08",
+        "__DL__223779|223779|NA|18856041.0|0|av01.0.00M.08",
+        "__DL__1024|252182|NA|NA|NA|none",
+        "__DL__252182|252182|NA|60204221.0|NA|none",
+        "[Merger] Merging formats into \"v.mkv\"",
+        "[Metadata] Adding metadata to \"v.mkv\"",
+        "__FILE__/tmp/v.mkv",
+    ];
+
+    #[test]
+    fn la_salida_real_de_yt_dlp_acaba_en_100() {
+        let mut meter = ProgressMeter::default();
+        let mut last_percent = 0.0;
+        let mut phases = Vec::new();
+        let mut file = None;
+
+        for line in SALIDA_REAL {
+            match parse_line(line) {
+                Some(LineEvent::Plan(total)) => meter.plan(total),
+                Some(LineEvent::Progress(raw)) => {
+                    let tick = meter.feed(raw);
+                    let percent = tick.percent.expect("el plan da el total");
+                    assert!(
+                        percent >= last_percent,
+                        "la barra retrocedió en «{line}»: {percent} < {last_percent}"
+                    );
+                    last_percent = percent;
+                    assert!(tick.total_bytes == Some(475961), "total del trabajo");
+                }
+                Some(LineEvent::Phase(name)) => phases.push(name),
+                Some(LineEvent::File(path)) => file = Some(path),
+                None => panic!("línea sin interpretar: {line}"),
+            }
+        }
+
+        assert_eq!(last_percent, 100.0);
+        assert_eq!(phases, vec!["Merger".to_string(), "Metadata".to_string()]);
+        assert_eq!(file.as_deref(), Some("/tmp/v.mkv"));
+        assert_eq!(meter.stream_label(), Some("audio"));
     }
 
     #[test]
