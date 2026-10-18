@@ -91,16 +91,40 @@ Under the hood it uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) and `ffmpeg` a
 
 ## Install
 
-Installers for each version are published automatically to [GitHub Releases](https://github.com/SyberFoxx/downlink/releases):
+Installers for each version are published automatically to [GitHub Releases](https://github.com/SyberFoxx/downlink/releases). Download the one for your system and run a single command in the folder where it landed:
 
-| Platform | Format |
-|---|---|
-| Debian / Ubuntu | `.deb` → `sudo apt install ./Downlink_*.deb` |
-| Fedora / openSUSE | `.rpm` → `sudo dnf install ./Downlink-*.rpm` (or `sudo zypper install ./Downlink-*.rpm`) |
-| Any Linux distro | `AppImage` → `chmod +x Downlink_*.AppImage && ./Downlink_*.AppImage` |
-| Windows 10 / 11 | `.msi` or `.exe` (NSIS) — install and you're done |
+| System | Package | Command |
+|---|---|---|
+| Debian · Ubuntu · **Zorin OS** · Pop!\_OS · Linux Mint · Kali · KDE neon | `.deb` | `sudo apt install ./Downlink_*_amd64.deb` |
+| Fedora · RHEL · CentOS Stream · Rocky · AlmaLinux · Nobara | `.rpm` | `sudo dnf install ./Downlink-*.x86_64.rpm` |
+| openSUSE Tumbleweed · Leap | `.rpm` | `sudo zypper install ./Downlink-*.x86_64.rpm` |
+| Arch · Manjaro · EndeavourOS · CachyOS · Garuda | AppImage | `sudo pacman -S --needed fuse2`, then [the AppImage steps](#appimage-any-distro) |
+| Any other distro (Gentoo, Void, Alpine, Nix…) | AppImage | [the AppImage steps](#appimage-any-distro) |
+| Windows 10 / 11 | `.msi` or `.exe` (NSIS) | install and you're done |
 
 macOS has no package of its own yet (it's on the [roadmap](#roadmap)); for now you can run it from source with `npm run tauri dev`.
+
+### AppImage (any distro)
+
+The AppImage is self-contained — it carries its own web engine — so it works on any distribution with **glibc 2.35 or newer**: Ubuntu 22.04+, Debian 12+, Zorin OS 17+, Fedora 36+, Arch, openSUSE… (newer is always fine).
+
+```bash
+chmod +x Downlink_*_amd64.AppImage
+./Downlink_*_amd64.AppImage
+```
+
+Each release also publishes a `SHA256SUMS.txt` if you want to check the download first:
+
+```bash
+sha256sum -c SHA256SUMS.txt --ignore-missing
+```
+
+If it doesn't start:
+
+- **`libfuse.so.2` missing** — the AppImage format needs FUSE 2: `sudo apt install libfuse2` (Debian/Ubuntu/Zorin), `sudo dnf install fuse-libs` (Fedora/similar), `sudo zypper install fuse` (openSUSE), `sudo pacman -S fuse2` (Arch). You can also skip FUSE entirely by extracting first: `./Downlink_*_amd64.AppImage --appimage-extract-and-run`.
+- **`GLIBC_… not found`** — your system is older than Ubuntu 22.04 (glibc 2.35). Install the `.deb`/`.rpm` for your distro or run the app from source.
+- **Blank or black window** (NVIDIA, virtual machines, Wayland) — WebKit's GPU path is failing on your driver. Turn it off for this app: `WEBKIT_DISABLE_DMABUF_RENDERER=1 ./Downlink_*_amd64.AppImage`. If it still misbehaves, try `WEBKIT_DISABLE_COMPOSITING_MODE=1` as well.
+- **No application-menu entry** — an AppImage is a single file with no installer. Launch it from the file manager or pin it to your dock.
 
 You don't need to install yt-dlp, ffmpeg or a JS runtime: if it can't find them on your system, Downlink downloads and maintains its own copies.
 

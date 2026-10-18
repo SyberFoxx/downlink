@@ -20,7 +20,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Ubuntu 22.04 a propósito, no `ubuntu-latest`: el binario hereda la
+          # glibc del runner (24.04 pide 2.39 y no arranca en Zorin 17, Debian 12
+          # ni Ubuntu 22.04). Con 22.04 el mínimo es glibc 2.35 y funciona en
+          # todas las distros actuales.
+          - os: ubuntu-22.04
             nombre: Linux
             bundles: deb,rpm,appimage
           - os: windows-latest
@@ -85,6 +89,14 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Calcular sumas SHA-256
+        run: |
+          # Con nombres planos (sin las subcarpetas deb/, rpm/…), que es como
+          # quedan los ficheros al subirlos a la release.
+          find dist -type f -print0 | sort -z | xargs -0 sha256sum \
+            | sed -E 's#  .*/#  #' > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Crear la release con los instaladores
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -97,6 +109,7 @@ jobs:
             echo "No se encontró ningún instalador en dist/" >&2
             exit 1
           fi
+          assets+=(SHA256SUMS.txt)
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${assets[@]}" --clobber
           else
