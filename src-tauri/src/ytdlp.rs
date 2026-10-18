@@ -565,7 +565,7 @@ pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> 
     )
     .await
     .map_err(|_| "El sitio no respondió a tiempo. Intenta de nuevo.".to_string())?
-    .map_err(|e| format!("No se pudo ejecutar yt-dlp: {e}"))?;
+    .map_err(|e| engine::spawn_error(&e))?;
 
     if !output.status.success() {
         return Err(friendly_error(&String::from_utf8_lossy(&output.stderr)));
@@ -943,7 +943,7 @@ pub fn spawn_process(
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()
-        .map_err(|e| format!("No se pudo ejecutar yt-dlp: {e}"))?;
+        .map_err(|e| engine::spawn_error(&e))?;
 
     let stdout = child
         .stdout

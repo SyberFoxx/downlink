@@ -196,6 +196,19 @@ pub fn ffmpeg() -> Option<(PathBuf, Source)> {
     resolve("ffmpeg", "DOWNLINK_FFMPEG")
 }
 
+/// Error al no poder lanzar el motor.
+///
+/// En Android los motores van dentro del APK y todavía no hay ninguno (ver
+/// `docs/android-v1.md`, fase C), así que conviene decir eso en vez de soltar un
+/// error del sistema, que parecería una avería.
+pub fn spawn_error(error: &std::io::Error) -> String {
+    if cfg!(target_os = "android") {
+        "Esta versión para Android todavía no incluye el motor de descarga.".to_string()
+    } else {
+        format!("No se pudo ejecutar yt-dlp: {error}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,6 +220,17 @@ mod tests {
             assert_eq!(name, "yt-dlp.exe");
         } else {
             assert_eq!(name, "yt-dlp");
+        }
+    }
+
+    #[test]
+    fn el_error_de_lanzamiento_explica_que_es_lo_que_falta() {
+        let error = std::io::Error::from(std::io::ErrorKind::NotFound);
+        let message = spawn_error(&error);
+        if cfg!(target_os = "android") {
+            assert!(message.contains("Android"), "{message}");
+        } else {
+            assert!(message.contains("yt-dlp"), "{message}");
         }
     }
 

@@ -3,6 +3,8 @@ mod history;
 mod queue;
 mod queue_store;
 mod settings;
+#[cfg(target_os = "android")]
+mod share;
 mod theme;
 #[cfg(desktop)]
 mod tray;
@@ -51,6 +53,12 @@ impl SharedLink {
         self.0.lock().ok().and_then(|mut slot| slot.take())
     }
 }
+
+/// Handle de la app para la capa Java: el texto compartido entra por una función
+/// JNI, que no recibe `State`, así que hay que tenerlo a mano para guardarlo y
+/// avisar a la interfaz.
+#[cfg(target_os = "android")]
+pub(crate) static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
 
 /// Banderas en tiempo de ejecución para la UX de escritorio.
 struct RuntimeFlags {
@@ -335,6 +343,10 @@ pub fn run() {
             let queue = Arc::new(Queue::new(app.handle().clone(), concurrency));
             app.manage(QueueState(queue.clone()));
             app.manage(SharedLink::default());
+
+            // Deja el handle a mano para el lado Java (ver `share.rs`).
+            #[cfg(target_os = "android")]
+            let _ = APP_HANDLE.set(app.handle().clone());
 
             // Bandeja del sistema (desktop).
             let mut tray_available_flag = false;
