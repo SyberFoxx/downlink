@@ -82,6 +82,10 @@ export interface QueueJob {
   etaSecs: number | null;
   filePath: string | null;
   message: string | null;
+  /** Postprocesador en curso (`Merger`, `Metadata`…), si lo hay. */
+  phase?: string | null;
+  /** Stream que baja ahora: `video` o `audio`. */
+  stream?: string | null;
 }
 
 /** Una descarga completada, guardada en el historial. */

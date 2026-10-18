@@ -147,6 +147,21 @@ textarea {
   user-select: text;
 }
 
+/* Bar without a percentage (post-processing, or while yt-dlp has no total yet):
+   it slides on its own so it reads as "still working" instead of stuck. */
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+
+.progress-indeterminate {
+  animation: progress-indeterminate 1.4s ease-in-out infinite;
+}
+
 /* ---------------------------------------------------------------------------
    Móvil. Por debajo del breakpoint `md` de Tailwind (48rem = 768px) la app
    pasa de leerse "a lo ancho" a leerse "a lo alto": la barra lateral se

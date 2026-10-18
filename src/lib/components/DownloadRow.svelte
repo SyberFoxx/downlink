@@ -44,10 +44,35 @@
     cancelled: "Cancelado",
   };
 
+  /** Nombre del postprocesador que reporta yt-dlp. */
+  const PHASE_LABEL: Record<string, string> = {
+    ExtractAudio: "Extrayendo el audio",
+    Merger: "Mezclando vídeo y audio",
+    VideoConvertor: "Convirtiendo el vídeo",
+    VideoRemuxer: "Reempaquetando el vídeo",
+    Metadata: "Escribiendo los metadatos",
+    EmbedThumbnail: "Incrustando la carátula",
+    FixupM3u8: "Ajustando el vídeo",
+    FixupStretched: "Ajustando la duración",
+    MoveFiles: "Guardando el archivo",
+  };
+
+  /** Stream que se está bajando (una descarga con mezcla baja dos). */
+  const STREAM_LABEL: Record<string, string> = {
+    video: "Vídeo",
+    audio: "Audio",
+  };
+
   let status = $derived(job.status);
   let percent = $derived(job.percent);
   let subtitle = $derived(summarizeOptions(job.options));
   let showBar = $derived(status === "downloading" || status === "processing");
+  /** Sin porcentaje no hay barra que llenar: se muestra en movimiento. */
+  let indeterminate = $derived(status === "processing" || percent == null);
+  let processingText = $derived(
+    (job.phase ? PHASE_LABEL[job.phase] : null) ?? "Procesando el archivo",
+  );
+  let streamLabel = $derived(job.stream ? (STREAM_LABEL[job.stream] ?? null) : null);
 </script>
 
 <div
@@ -123,6 +148,12 @@
 
       {#if status === "downloading"}
         <p class="mt-0.5 text-xs text-ink-muted">
+          {#if streamLabel}
+            <span
+              class="mr-1 rounded bg-elevated px-1 py-px text-[10px] font-medium text-ink-soft"
+              >{streamLabel}</span
+            >
+          {/if}
           {#if percent != null}
             <span class="tabular-nums text-ink-soft">{percent.toFixed(1)}%</span>
             ·
@@ -132,15 +163,15 @@
           · {formatSpeed(job.speedBps)} · ETA {formatEta(job.etaSecs)}
         </p>
       {:else if status === "processing"}
-        <p class="mt-0.5 text-xs text-ink-muted">
-          Mezclando o convirtiendo el archivo…
-        </p>
+        <p class="mt-0.5 text-xs text-ink-muted">{processingText}…</p>
       {:else if status === "queued"}
         <p class="mt-0.5 text-xs text-ink-muted">{STATUS_LABEL.queued}</p>
       {:else if status === "paused"}
         <p class="mt-0.5 text-xs text-ink-muted">
           En pausa — reanuda desde donde iba
         </p>
+      {:else if status === "done" && job.message}
+        <p class="mt-0.5 whitespace-pre-wrap text-xs text-warn/90">{job.message}</p>
       {:else if status === "done" && job.filePath}
         <p class="mt-0.5 truncate font-mono text-xs text-ink-faint">
           {job.filePath}
@@ -158,12 +189,14 @@
     <div class="flex w-44 shrink-0 items-center justify-end gap-1.5">
       {#if showBar}
         <div class="mr-1 h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
-          <div
-            class="h-full rounded-full transition-[width] duration-300 {status === 'processing'
-              ? 'animate-pulse bg-warn'
-              : 'bg-accent-hover'}"
-            style="width: {Math.min(percent ?? 0, 100)}%"
-          ></div>
+          {#if indeterminate}
+            <div class="progress-indeterminate h-full w-1/3 rounded-full bg-warn"></div>
+          {:else}
+            <div
+              class="h-full rounded-full bg-accent-hover transition-[width] duration-300"
+              style="width: {Math.min(percent ?? 0, 100)}%"
+            ></div>
+          {/if}
         </div>
       {/if}
 
