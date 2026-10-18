@@ -4,15 +4,19 @@ import {
   clearFinished,
   getQueue,
   onQueueUpdated,
+  onSharedLink,
   pauseDownload,
   probeUrl,
   reorderQueue,
   resumeDownload,
   retryDownload,
   startDownload,
+  takeSharedText,
 } from "./api";
 import { defaultOptions } from "./options";
-import { extractError } from "./utils";
+import { settings } from "./settings.svelte";
+import { toast } from "./toast.svelte";
+import { extractError, isAndroid } from "./utils";
 import type { DownloadOptions, ProbeInfo, QueueJob } from "./types";
 
 /**
@@ -64,15 +68,64 @@ export function startQueueListener(): Promise<() => void> {
   return unlisten;
 }
 
-/** Extrae las URLs únicas de un texto (pegado, arrastre…). */
-export function extractUrls(text: string): string[] {
-  const matches = text.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
-  return [...new Set(matches.map((m) => m.trim()))];
+/** Aviso cuando el texto recibido no traía ningún enlace que analizar. */
+const NO_URL_MESSAGE = "No he encontrado ningún enlace en el texto recibido.";
+
+/** Puntuación que arrastra el texto que rodea a un enlace al compartirlo. */
+const TRAILING_PUNCTUATION = /[.,;:!?…]+$/;
+
+/** Pares de cierre que sobran cuando el enlace venía entre paréntesis. */
+const BRACKETS: ReadonlyArray<readonly [string, string]> = [
+  ["(", ")"],
+  ["[", "]"],
+  ["{", "}"],
+];
+
+function countChar(text: string, char: string): number {
+  let total = 0;
+  for (const current of text) if (current === char) total++;
+  return total;
 }
 
-/** Analiza un enlace y deja su vista previa en el panel. */
+/**
+ * Quita del final de la URL lo que en realidad es del texto que la envuelve:
+ * «mira esto https://…» acaba en punto, y «(https://…)» en paréntesis. Los
+ * paréntesis solo se quitan si no cierran un par abierto dentro de la URL
+ * (una URL con «(desambiguación)» los conserva).
+ */
+function trimUrl(url: string): string {
+  let out = url.replace(TRAILING_PUNCTUATION, "");
+  for (;;) {
+    let changed = false;
+    const punctuation = out.replace(TRAILING_PUNCTUATION, "");
+    if (punctuation !== out) {
+      out = punctuation;
+      changed = true;
+    }
+    for (const [open, close] of BRACKETS) {
+      if (out.endsWith(close) && countChar(out, close) > countChar(out, open)) {
+        out = out.slice(0, -1);
+        changed = true;
+      }
+    }
+    if (!changed) return out;
+  }
+}
+
+/** Extrae las URLs únicas de un texto (pegado, arrastre, otra app…). */
+export function extractUrls(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
+  const urls = matches.map((match) => trimUrl(match.trim())).filter(Boolean);
+  return [...new Set(urls)];
+}
+
+/**
+ * Analiza un enlace y deja su vista previa en el panel. Acepta también el texto
+ * completo que comparte otra app (título y enlace en el mismo bloque).
+ */
 export async function analyze(raw?: string): Promise<void> {
-  const target = (raw ?? downloads.url).trim();
+  const text = (raw ?? downloads.url).trim();
+  const target = extractUrls(text)[0] ?? text;
   if (!target || downloads.probing) return;
   downloads.url = target;
   downloads.probing = true;
@@ -95,7 +148,10 @@ export async function analyze(raw?: string): Promise<void> {
 /** Un enlace → previsualiza; varios → van directos a la cola. */
 export async function handleIncoming(text: string): Promise<void> {
   const urls = extractUrls(text);
-  if (urls.length === 0) return;
+  if (urls.length === 0) {
+    toast.info(NO_URL_MESSAGE);
+    return;
+  }
   if (urls.length === 1) {
     await analyze(urls[0]);
     return;
@@ -123,6 +179,90 @@ async function enqueueUrls(urls: string[]): Promise<void> {
     }
   }
   downloads.adding = 0;
+}
+
+/**
+ * Enlace recibido desde otra app por el *share intent* de Android. Respeta lo
+ * elegido en Ajustes: descargarlo ya (como pegar el enlace en la consola) o
+ * dejar la vista previa para elegir opciones. Si vienen varios enlaces a la vez
+ * van todos a la cola, igual que al pegarlos.
+ */
+export async function handleShared(text: string): Promise<void> {
+  const urls = extractUrls(text);
+  if (urls.length === 0) {
+    toast.info(NO_URL_MESSAGE);
+    return;
+  }
+  if (urls.length > 1 || settings.value.shareAction === "preview") {
+    await handleIncoming(text);
+    return;
+  }
+  await downloadDirect(urls[0]);
+}
+
+/** Analiza el enlace y lo encola sin pedir confirmación. */
+async function downloadDirect(link: string): Promise<void> {
+  if (downloads.probing) return;
+  downloads.url = link;
+  downloads.probing = true;
+  downloads.errorMessage = null;
+  downloads.probe = null;
+  const snapshot = $state.snapshot(downloads.options) as DownloadOptions;
+  try {
+    const info = await probeUrl(link);
+    // Una lista de reproducción puede ser enorme: mejor que la revise el usuario.
+    if (info.kind === "playlist") {
+      downloads.probe = info;
+      downloads.selectedIndices = new Set(info.entries.map((_, index) => index));
+      return;
+    }
+    await startDownload(info.webpageUrl, info.title, snapshot, info.thumbnail);
+    toast.success(`En la cola: ${info.title}`);
+  } catch (e) {
+    const message = extractError(e);
+    downloads.errorMessage = message;
+    // El aviso del panel no se ve si el usuario sigue en otra vista: la app se
+    // abrió para descargar y hay que decirle que no ha podido.
+    toast.error(message);
+  } finally {
+    downloads.probing = false;
+  }
+}
+
+/** Texto compartido ya tratado, para no repetirlo si llega por las dos vías. */
+let lastShared: { text: string; at: number } | null = null;
+
+/**
+ * Recibe los enlaces que comparten otras apps. Solo tiene sentido en Android:
+ * en el escritorio no hay *share intent* y devuelve un no-op.
+ *
+ * Las dos vías se solapan a propósito. Al compartir, Android arranca la app, así
+ * que lo normal es que el enlace espere en el backend (`take_shared_text`) a que
+ * exista la interfaz; si ya estaba abierta, llega por el evento `share-intent`.
+ * El duplicado se descarta por si llegan las dos.
+ */
+export async function startShareListener(
+  handle: (text: string) => void,
+): Promise<() => void> {
+  if (!isAndroid()) return () => {};
+  // El ajuste decide qué se hace con el enlace: hay que tenerlo antes de recibir
+  // nada, o un enlace entrante usaría el valor por defecto sin querer.
+  await settings.load().catch(() => undefined);
+  const once = (text: string): void => {
+    const now = Date.now();
+    if (lastShared && lastShared.text === text && now - lastShared.at < 2000) {
+      return;
+    }
+    lastShared = { text, at: now };
+    handle(text);
+  };
+  const unlisten = await onSharedLink(once).catch(() => () => {});
+  takeSharedText()
+    .then((pending) => {
+      if (pending) once(pending);
+    })
+    .catch(() => undefined);
+  return unlisten;
 }
 
 /** Encola el vídeo o la selección de la playlist analizada. */

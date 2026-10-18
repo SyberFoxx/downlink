@@ -4,6 +4,7 @@
     cancel,
     clear,
     download,
+    extractUrls,
     pause,
     reorder,
     resume,
@@ -116,8 +117,13 @@
       onpaste={(e) => {
         // Al pegar en el propio campo se analiza al momento (el escuchador
         // global ignora los campos de texto para no interferir con ellos).
+        // Puede venir el texto entero de otra app (título + enlace): se limpia
+        // y se deja en el campo solo la URL.
         const text = e.clipboardData?.getData("text")?.trim();
-        if (text && /^https?:\/\//i.test(text)) void analyze(text);
+        if (text && !probing && extractUrls(text).length > 0) {
+          e.preventDefault();
+          void analyze(text);
+        }
       }}
     />
     <button
@@ -140,8 +146,14 @@
   </div>
 
   <p class="mt-2 text-xs text-ink-faint">
-    Tip: pega uno o varios enlaces con <span class="font-mono text-ink-muted">Ctrl+V</span>,
-    o arrástralos directamente a la ventana
+    <span class="max-md:hidden"
+      >Tip: pega uno o varios enlaces con <span class="font-mono text-ink-muted"
+        >Ctrl+V</span
+      >, o arrástralos directamente a la ventana</span
+    >
+    <span class="md:hidden"
+      >Pega uno o varios enlaces, o compártelos desde otra app</span
+    >
   </p>
 
   <!-- Enlaces añadiéndose a la cola -->

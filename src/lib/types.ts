@@ -102,6 +102,9 @@ export interface HistoryEntry {
 
 export type CookiesMode = "none" | "browser" | "file";
 
+/** Qué hacer cuando otra app comparte un enlace con Downlink (Android). */
+export type ShareAction = "download" | "preview";
+
 /** Vistas principales de la app (las que muestra la barra lateral). */
 export type AppView = "descargas" | "historial" | "apariencia" | "ajustes";
 
@@ -130,6 +133,8 @@ export interface Settings {
   autoDownloadFfmpeg: boolean;
   /** Descarga un runtime JS (quickjs) al arrancar si no hay ninguno. */
   autoDownloadJsRuntime: boolean;
+  /** Qué hacer al recibir un enlace compartido desde otra app. */
+  shareAction: ShareAction;
   /** Carpeta de destino de las descargas (null = la del sistema). */
   downloadDir: string | null;
   /** Reanuda las descargas pendientes al abrir la app. */

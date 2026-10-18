@@ -62,6 +62,21 @@ export function onQueueUpdated(
   return listen<QueueJob[]>("queue-updated", (event) => callback(event.payload));
 }
 
+/**
+ * Enlace que compartió otra app y que quedó pendiente antes de que la interfaz
+ * cargara (el caso normal al compartir: Android arranca la app).
+ */
+export function takeSharedText(): Promise<string | null> {
+  return invoke<string | null>("take_shared_text");
+}
+
+/** Enlace compartido mientras la app ya estaba abierta. */
+export function onSharedLink(
+  callback: (text: string) => void,
+): Promise<() => void> {
+  return listen<string>("share-intent", (event) => callback(event.payload));
+}
+
 export function getHistory(): Promise<HistoryEntry[]> {
   return invoke<HistoryEntry[]>("get_history");
 }

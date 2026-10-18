@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoUpdateYtdlp: true,
   autoDownloadFfmpeg: true,
   autoDownloadJsRuntime: true,
+  shareAction: "download",
   downloadDir: null,
   persistQueue: true,
   notifyOnFinish: true,

@@ -8,8 +8,10 @@ fases. Las referencias son del árbol en v0.10.0 (`archivo:línea`).
   `yt-dlp` y `ffmpeg` como **procesos externos**, y iOS no permite crear
   procesos hijos desde una app. No es un problema de esfuerzo, es de plataforma.
 - **Estado**: fase A (interfaz móvil) casi lista: el armazón ya está adaptado y
-  medido en navegador. Quedan los **gestos** para reordenar la cola y el pegado
-  por *share intent*; después, el andamiaje Android y el motor nativo.
+  medido en navegador, y los enlaces compartidos desde otras apps ya se reciben y
+  se tratan (falta el puente nativo, que llega con el andamiaje). Quedan los
+  **gestos** para reordenar la cola; después, el andamiaje Android y el motor
+  nativo.
 
 ## Resumen
 
@@ -141,6 +143,14 @@ Ya hay gating `cfg(desktop)`, pero hay que rematar el caso móvil:
 - `src-tauri/src/ytdlp.rs:60` — `--cookies-from-browser`: no aplica. En móvil hay
   que ofrecer solo **importar `cookies.txt`** (vía SAF) y adaptar los mensajes de
   error que hoy mandan a Ajustes → cookies del navegador.
+- En móvil las cookies se van a necesitar más que en escritorio: muchos sitios
+  públicos (YouTube entre ellos) funcionan sin ellas, pero Instagram, Facebook,
+  X/Twitter y todo lo privado o con restricción de edad piden sesión cada vez más
+  a menudo. El mensaje de error tiene que decir qué hacer **en Android**
+  (`cookies.txt`), no ofrecer un navegador que no existe.
+- El selector de archivos del sistema devuelve un `content://` que yt-dlp no sabe
+  abrir como fichero: hay que copiarlo al directorio privado de la app y pasar esa
+  ruta.
 
 ### 2.5. Paleta del escritorio y fondo
 
@@ -156,7 +166,49 @@ Ya hay gating `cfg(desktop)`, pero hay que rematar el caso móvil:
 `revealItemInDir` no existe en Android (`src/lib/downloads.svelte.ts:212-215`,
 `src/lib/views/HistoryView.svelte:50-53`): sustituir por **abrir/compartir**.
 
-### 2.7. CI
+### 2.7. Enlaces compartidos (*share intent*)
+
+Lo que ya está hecho y probado **sin dispositivo** (navegador simulando el WebView
+de Android, ver 6):
+
+- `extractUrls()` se queda con la URL limpia: fuera la puntuación que arrastra el
+  texto que la envuelve («… /vídeo.» o «(…?list=PL123)»), pero dentro los
+  paréntesis que sí son parte de la URL (una desambiguación de Wikipedia).
+- `analyze()` acepta el bloque entero que comparte otra app (título + enlace).
+  Antes se le pasaba tal cual a yt-dlp, que respondía
+  `'Un vídeo…\nhttps://…' is not a valid URL`.
+- Si el texto no trae ningún enlace, se avisa («No he encontrado ningún enlace en
+  el texto recibido») en vez de no hacer nada, que dejaba la app con pinta de rota.
+- Ajuste **Compartir desde otras apps** (solo se muestra en Android, por el
+  agente de usuario): descargar directamente con las opciones de la vista
+  Descargar —el flujo de pegar el enlace en la consola— o dejar la vista previa.
+  Por defecto, descargar. Una lista de reproducción nunca se descarga sola: cae a
+  la vista previa para que se elija.
+- La interfaz escucha `share-intent` y, al arrancar, recoge el enlace que quedó
+  pendiente (`take_shared_text`). Las entregas repetidas del mismo texto en menos
+  de dos segundos se descartan.
+
+Lo que falta, y necesita el andamiaje (fase B) y un dispositivo:
+
+- `AndroidManifest.xml`, en la actividad principal:
+  ```xml
+  <intent-filter>
+    <action android:name="android.intent.action.SEND" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <data android:mimeType="text/plain" />
+  </intent-filter>
+  ```
+  Con esto Downlink aparece en el menú «Compartir» de cualquier app (YouTube,
+  Instagram, Chrome, TikTok…), que es el objetivo.
+- `launchMode="singleTask"` y leer el enlace en `onCreate` **y** en
+  `onNewIntent`: si la app ya estaba abierta, Android no la vuelve a crear y el
+  enlace llega por el segundo.
+- El caso normal es el **frío**: al compartir, Android arranca la app, así que el
+  texto existe mucho antes que la webview. Por eso se guarda en `SharedLink` y la
+  interfaz lo pide al montar; el evento queda para cuando ya está en marcha.
+- Varios enlaces compartidos de una vez van todos a la cola, igual que al pegarlos.
+
+### 2.8. CI
 
 - `.github/workflows/ci.yml` — sin target Android.
 - `.github/workflows/release.yml` — sin job de APK/AAB ni Android SDK/NDK.
@@ -210,16 +262,29 @@ navegador real a 390×844.
 - [x] Feedback de pulsación en los controles: donde no hay ratón (`hover: none` y
       `pointer: coarse`) todo lo pulsable se atenúa al presionarlo. El escritorio
       sigue igual.
-- [ ] Reordenar la cola con **gestos** (Pointer Events) en vez de HTML5 drag & drop.
 - [x] `user-select: none` revisado: el texto que conviene copiar (el error de una
       descarga, la ruta del archivo, el resultado de la prueba de conexión) lleva
       `.copyable` y se puede seleccionar; el resto de la interfaz sigue sin
       seleccionarse a propósito (`app.css:64`).
-- [ ] Pegado por *share intent* en vez de `Ctrl+V`.
+- [x] Enlaces **compartidos desde otras apps**: al llegar el texto completo de
+      otra app (título + enlace) se extrae la URL, con la puntuación que arrastra
+      el texto alrededor fuera y los paréntesis que sí son del enlace dentro; si
+      no hay ningún enlace, se avisa en vez de no hacer nada. Un ajuste elige
+      entre descargar ya (como pegar el enlace en la consola) o dejar la vista
+      previa. Verificado en navegador simulando el WebView de Android, incluido el
+      arranque desde cero (el enlace espera al otro lado y la app lo recoge).
+- [ ] Reordenar la cola con **gestos** (Pointer Events) en vez de HTML5 drag & drop.
+- [ ] Puente nativo del *share intent* (`intent-filter` y plugin Android). El lado
+      de la app ya está hecho y probado: ver 2.7 y fase B.
 
 ### Fase B — Andamiaje Android
 
 - [ ] `tauri android init` (crea `src-tauri/gen/android`).
+- [ ] `intent-filter` de `ACTION_SEND` (`text/plain`) en la actividad principal,
+      `launchMode="singleTask"`, y leer `EXTRA_TEXT`/`EXTRA_HTML_TEXT` en
+      `onCreate` y en `onNewIntent`; el plugin entrega el texto a
+      `SharedLink::push` (`src-tauri/src/lib.rs`) y emite `share-intent`. El lado
+      de la app ya está hecho y probado (ver 2.8).
 - [ ] `minSdk`/`targetSdk` y permisos (INTERNET, FOREGROUND_SERVICE, POST_NOTIFICATIONS).
 - [ ] Capability de móvil (`mobile-schema`).
 - [ ] Configuración de ventana condicional (`tauri.conf.json:18-19`).
@@ -266,7 +331,20 @@ navegador real a 390×844.
 2. **libc**: los binarios de Android usan Bionic, no glibc. Conseguir/compilar
    yt-dlp y ffmpeg para arm64 Android es la parte con más incógnitas.
 3. **Peso del APK**: yt-dlp + ffmpeg + runtime JS por arquitectura.
-4. **W^X**: confirmar en dispositivo real desde qué directorio se puede ejecutar.
+4. **W^X**: desde Android 10, una app con `targetSdk ≥ 29` **no puede ejecutar
+   binarios de su propio directorio de datos**. Es la razón por la que Termux sigue
+   en `targetSdk 28` y no está en Play. Hay dos salidas y hay que elegir antes de
+   la fase C; el resto del port no cambia:
+   - **Motores dentro del APK**, como `jniLibs` (`libytdlp.so`, `libffmpeg.so`…):
+     el instalador los deja en un directorio con permiso de ejecución, así que
+     funciona con `targetSdk` actual y en Play. A cambio, el motor **no se puede
+     actualizar solo** (cada actualización de yt-dlp es un APK nuevo) y el APK
+     engorda (decenas de MB por arquitectura; el build de ffmpeg que usa la app
+     ronda los 150 MB sin comprimir).
+   - **`targetSdk 28`**: se conserva la copia gestionada y el actualizador que ya
+     existen, pero la app queda fuera de Play (APK/F-Droid).
+   Que la app descargue el motor no basta: `updater.rs:341` no tiene caso
+   `android` a propósito hasta decidir esto.
 
 ## 6. Cómo probar sin dispositivo
 
@@ -286,3 +364,10 @@ La ventana de Tauri no sirve para esto porque tiene `minWidth: 940`
 Datos clave a 390×844 después de la fase A: `main` a 390 px de ancho (antes 166),
 barra inferior de 390×65 con botones de 91×51 (antes 207×32 dentro de una barra
 lateral de 224 px), tipografía raíz 17 px y sin desbordamiento horizontal.
+
+El mismo banco sirve para el **share intent** sin móvil: se le cambia el agente de
+usuario al del WebView de Android (la app lo mira para saber dónde corre), el
+*stub* responde a `take_shared_text` con el texto compartido y puede emitir
+`share-intent` como haría Rust. Así se comprueban las dos vías —app cerrada (el
+enlace espera) y app abierta (llega el evento)—, el ajuste de Ajustes y el
+resultado en pantalla, con el texto real que manda cada app.

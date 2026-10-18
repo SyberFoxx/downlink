@@ -9,8 +9,8 @@ mod tray;
 mod updater;
 mod ytdlp;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use tauri::WindowEvent;
 use tauri::{Manager, State};
@@ -22,6 +22,35 @@ use ytdlp::DownloadOptions;
 
 /// Estado global de la cola de descargas.
 struct QueueState(Arc<Queue>);
+
+/// Enlace que ha compartido otra app (Android) y que la interfaz todavía no ha
+/// recogido. El caso frío es el normal: el sistema lanza la app al compartir, así
+/// que el texto llega mucho antes de que exista la webview. Se guarda aquí y la
+/// interfaz lo pide al arrancar con `take_shared_text`; si ya está en marcha, el
+/// lado Android además emite `share-intent`.
+#[derive(Default)]
+pub struct SharedLink(Mutex<Option<String>>);
+
+impl SharedLink {
+    /// Guarda el enlace pendiente. Devuelve `true` si hay algo que anunciar.
+    /// Solo se conserva el último: interesa lo que el usuario acaba de compartir.
+    pub fn push(&self, text: &str) -> bool {
+        let trimmed = text.trim();
+        let Ok(mut slot) = self.0.lock() else {
+            return false;
+        };
+        if trimmed.is_empty() {
+            return false;
+        }
+        *slot = Some(trimmed.to_string());
+        true
+    }
+
+    /// Entrega el enlace pendiente y lo limpia: se trata una sola vez.
+    pub fn take(&self) -> Option<String> {
+        self.0.lock().ok().and_then(|mut slot| slot.take())
+    }
+}
 
 /// Banderas en tiempo de ejecución para la UX de escritorio.
 struct RuntimeFlags {
@@ -123,6 +152,13 @@ async fn clear_finished(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 /// Estado actual de la cola (para sincronizar al montar la vista).
+/// Recoge (y limpia) el enlace que compartió otra app antes de que la interfaz
+/// cargara. Devuelve `None` si no hay nada pendiente.
+#[tauri::command]
+fn take_shared_text(state: State<'_, SharedLink>) -> Option<String> {
+    state.take()
+}
+
 #[tauri::command]
 async fn get_queue(state: State<'_, QueueState>) -> Result<Vec<JobView>, String> {
     Ok(state.0.snapshot().await)
@@ -298,6 +334,7 @@ pub fn run() {
             ))));
             let queue = Arc::new(Queue::new(app.handle().clone(), concurrency));
             app.manage(QueueState(queue.clone()));
+            app.manage(SharedLink::default());
 
             // Bandeja del sistema (desktop).
             let mut tray_available_flag = false;
@@ -350,6 +387,7 @@ pub fn run() {
             reorder_queue,
             clear_finished,
             get_queue,
+            take_shared_text,
             get_history,
             remove_history,
             clear_history,
@@ -376,6 +414,26 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    use super::SharedLink;
+
+    /// El enlace compartido se entrega exactamente una vez: si la interfaz lo
+    /// pidiera dos veces, se analizaría dos veces el mismo enlace.
+    #[test]
+    fn el_enlace_compartido_se_entrega_una_sola_vez() {
+        let link = SharedLink::default();
+        assert_eq!(link.take(), None);
+
+        assert!(link.push("  https://youtu.be/abc  "));
+        assert_eq!(link.take().as_deref(), Some("https://youtu.be/abc"));
+        assert_eq!(link.take(), None);
+
+        // El último compartido es el que vale, y un texto vacío no pisa nada.
+        assert!(link.push("https://youtu.be/uno"));
+        assert!(link.push("https://youtu.be/dos"));
+        assert!(!link.push("   "));
+        assert_eq!(link.take().as_deref(), Some("https://youtu.be/dos"));
+    }
+
     /// La versión que muestra la interfaz sale del `Cargo.toml`; los
     /// instaladores, del `tauri.conf.json`. Si se bumpa uno y no el otro, la
     /// app publicada diría una versión distinta de la que anuncia su release.
