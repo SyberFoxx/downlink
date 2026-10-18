@@ -217,7 +217,7 @@
 
     <div class="flex flex-wrap items-center gap-2">
       <button
-        class="rounded-md border px-2.5 py-1 text-xs transition-colors {settings
+        class="tap rounded-md border px-2.5 py-1 text-xs transition-colors {settings
           .value.theme.accent === null
           ? 'border-accent/60 text-ink-strong'
           : 'border-line text-ink-muted hover:border-line-strong'}"
@@ -228,26 +228,34 @@
       {#each ACCENTS as color (color)}
         <button
           aria-label={`Acento ${color}`}
-          class="size-6 rounded-full border transition-transform hover:scale-110 {settings
-            .value.theme.accent === color
-            ? 'border-ink ring-2 ring-accent/50'
-            : 'border-line'}"
-          style="background:{color}"
+          class="tap tap-center size-6 rounded-full transition-transform hover:scale-110"
           onclick={() => theme.setAccent(color)}
-        ></button>
+        >
+          <span
+            class="size-6 rounded-full border {settings.value.theme.accent ===
+            color
+              ? 'border-ink ring-2 ring-accent/50'
+              : 'border-line'}"
+            style="background:{color}"
+          ></span>
+        </button>
       {/each}
       <label
-        class="flex size-6 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-line"
+        class="tap tap-center flex cursor-pointer"
         title="Color personalizado"
       >
-        <input
-          type="color"
-          class="size-9 cursor-pointer border-0 bg-transparent p-0"
-          value={currentAccent}
-          oninput={(e) =>
-            (settings.value.theme.accent = e.currentTarget.value)}
-          onchange={() => theme.setAccent(settings.value.theme.accent)}
-        />
+        <span
+          class="flex size-6 items-center justify-center overflow-hidden rounded-full border border-line"
+        >
+          <input
+            type="color"
+            class="size-9 cursor-pointer border-0 bg-transparent p-0"
+            value={currentAccent}
+            oninput={(e) =>
+              (settings.value.theme.accent = e.currentTarget.value)}
+            onchange={() => theme.setAccent(settings.value.theme.accent)}
+          />
+        </span>
       </label>
     </div>
   </section>
@@ -279,7 +287,7 @@
             min="0"
             max="100"
             value={opacityPct}
-            class="w-full accent-accent"
+            class="tap w-full accent-accent"
             oninput={(e) => {
               const v = Number(e.currentTarget.value);
               settings.value.theme.wallpaperOpacity = v / 100;
@@ -301,7 +309,7 @@
             min="0"
             max="60"
             value={blurPx}
-            class="w-full accent-accent"
+            class="tap w-full accent-accent"
             oninput={(e) => {
               const v = Number(e.currentTarget.value);
               settings.value.theme.wallpaperBlur = v;
@@ -316,13 +324,13 @@
 
       <div class="mt-4 flex items-center gap-2">
         <button
-          class="rounded-md border border-line px-3 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface"
+          class="tap rounded-md border border-line px-3 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface"
           onclick={chooseWallpaper}
         >
           Cambiar imagen
         </button>
         <button
-          class="rounded-md border border-danger-bg/60 px-3 py-1.5 text-sm text-danger transition-colors hover:bg-danger-bg/60"
+          class="tap rounded-md border border-danger-bg/60 px-3 py-1.5 text-sm text-danger transition-colors hover:bg-danger-bg/60"
           onclick={() => theme.clearWallpaper()}
         >
           Quitar
@@ -330,7 +338,7 @@
       </div>
     {:else}
       <button
-        class="rounded-md border border-line px-3 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface"
+        class="tap rounded-md border border-line px-3 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface"
         onclick={chooseWallpaper}
       >
         Elegir imagen…
@@ -370,14 +378,14 @@
 
     <div class="mt-3 flex items-center gap-2">
       <button
-        class="rounded-md border border-line px-3 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
+        class="tap rounded-md border border-line px-3 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
         disabled={adopting || !theme.palette}
         onclick={adoptPalette}
       >
         Adoptar paleta
       </button>
       <button
-        class="rounded-md border border-line px-3 py-1.5 text-sm text-ink-muted transition-colors hover:bg-surface"
+        class="tap rounded-md border border-line px-3 py-1.5 text-sm text-ink-muted transition-colors hover:bg-surface"
         onclick={() => refreshPalette()}
       >
         Volver a buscar
@@ -388,7 +396,7 @@
   <!-- Restablecer -->
   <div class="flex items-center gap-3">
     <button
-      class="rounded-md border border-line px-4 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface"
+      class="tap rounded-md border border-line px-4 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface"
       onclick={() => theme.reset()}
     >
       Restablecer apariencia

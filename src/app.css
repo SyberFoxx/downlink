@@ -174,6 +174,10 @@ textarea {
      de golpe (y de paso agranda un poco los objetivos táctiles). */
   :root {
     font-size: 17px;
+
+    /* Alto de la navegación inferior (65 px medidos con esta base): los avisos
+       emergentes se colocan por encima para no taparla. */
+    --nav-height: 65px;
   }
 
   /* El desenfoque a pantalla completa es caro en GPU móvil y con una pantalla
@@ -182,4 +186,37 @@ textarea {
     inset: 0;
     filter: none;
   }
+
+  /* Objetivos táctiles: nada pulsable baja de 44 px (lo que recomiendan las
+     guías de Android y iOS). Como los iconos miden 14-18 px, el área se agranda
+     alrededor con `.tap`; `.tap-center` centra además el contenido, que es lo
+     que necesitan los botones que solo llevan un icono. */
+  .tap {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .tap-center {
+    display: grid;
+    place-items: center;
+  }
+}
+
+/* Feedback de pulsación: en táctil no hay `hover`, así que el toque se marca al
+   presionar. Se limita a dispositivos sin ratón para no cambiar el escritorio. */
+@media (hover: none) and (pointer: coarse) {
+  button:not(:disabled):active,
+  a[href]:active,
+  [role="button"]:active,
+  label:has(input):active,
+  summary:active {
+    opacity: 0.7;
+  }
+}
+
+/* Texto que conviene poder copiar (un error largo, la ruta del archivo). El
+   resto de la interfaz no se puede seleccionar a propósito. */
+.copyable {
+  -webkit-user-select: text;
+  user-select: text;
 }

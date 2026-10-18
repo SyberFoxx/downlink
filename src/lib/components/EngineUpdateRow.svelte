@@ -131,7 +131,7 @@
     </div>
     <div class="flex shrink-0 gap-2">
       <button
-        class="rounded-md border border-line px-3 py-1.5 text-xs text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
+        class="tap rounded-md border border-line px-3 py-1.5 text-xs text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
         disabled={checking || updating}
         onclick={refresh}
       >
@@ -139,7 +139,7 @@
       </button>
       {#if info?.updateAvailable}
         <button
-          class="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:opacity-50"
+          class="tap rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:opacity-50"
           disabled={updating}
           onclick={runUpdate}
         >
@@ -164,11 +164,11 @@
     </div>
   {/if}
 
-  <label class="mt-3 flex items-center gap-2">
+  <label class="tap mt-3 flex items-center gap-2">
     <input
       type="checkbox"
       bind:checked={autoChecked}
-      class="size-3.5 accent-accent"
+      class="size-3.5 max-md:size-5 accent-accent"
     />
     <span class="text-xs text-ink-soft">{autoLabel}</span>
   </label>

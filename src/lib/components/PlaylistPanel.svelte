@@ -28,7 +28,7 @@
       <span class="text-xs text-ink-faint">{selected.size} de {count} seleccionados</span>
     </div>
     <button
-      class="shrink-0 rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
+      class="tap shrink-0 rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-soft transition-colors hover:border-line-strong hover:text-ink"
       onclick={allSelected ? onNone : onAll}
     >
       {allSelected ? "Quitar todos" : "Seleccionar todos"}
@@ -44,11 +44,11 @@
   <div class="max-h-80 overflow-y-auto">
     {#each entries as entry, index (index)}
       <label
-        class="flex cursor-pointer items-center gap-3 border-b border-line/40 px-4 py-2 transition-colors last:border-b-0 hover:bg-elevated/20"
+        class="tap flex cursor-pointer items-center gap-3 border-b border-line/40 px-4 py-2 transition-colors last:border-b-0 hover:bg-elevated/20"
       >
         <input
           type="checkbox"
-          class="size-3.5 shrink-0 accent-accent"
+          class="size-3.5 max-md:size-5 shrink-0 accent-accent"
           checked={selected.has(index)}
           onchange={() => onToggle(index)}
         />

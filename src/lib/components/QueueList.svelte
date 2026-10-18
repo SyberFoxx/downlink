@@ -91,7 +91,7 @@
 
     {#if finished > 0}
       <button
-        class="shrink-0 rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink-strong"
+        class="tap shrink-0 rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-muted transition-colors hover:border-line-strong hover:text-ink-strong"
         onclick={onClearFinished}
       >
         Limpiar completadas
@@ -109,7 +109,7 @@
               <div class="h-3.5 w-1/2 animate-pulse rounded bg-elevated"></div>
               <div class="h-2.5 w-1/3 animate-pulse rounded bg-elevated"></div>
             </div>
-            <div class="flex w-44 shrink-0 justify-end">
+            <div class="flex w-44 shrink-0 justify-end max-md:w-auto">
               <div class="size-6 animate-pulse rounded-md bg-elevated"></div>
             </div>
           </div>

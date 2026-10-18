@@ -143,7 +143,7 @@
     <div class="flex rounded-lg border border-line bg-canvas/60 p-0.5">
       {#each ["video", "audio"] as const as mode (mode)}
         <button
-          class="rounded-md px-3 py-1 text-xs font-medium transition-colors {options.mode ===
+          class="tap rounded-md px-3 py-1 text-xs font-medium transition-colors {options.mode ===
           mode
             ? 'bg-elevated text-ink'
             : 'text-ink-muted hover:text-ink-strong'}"
@@ -160,7 +160,7 @@
     <div class="flex flex-wrap gap-1.5">
       {#each presetIds as id (id)}
         <button
-          class="rounded-full border px-2.5 py-1 text-[11px] transition-colors {activePreset ===
+          class="tap rounded-full border px-2.5 py-1 text-[11px] transition-colors {activePreset ===
           id
             ? 'border-accent/60 bg-accent/10 text-accent-soft'
             : 'border-line text-ink-soft hover:border-line-strong hover:text-ink'}"
@@ -182,7 +182,7 @@
         <select
           aria-label="Calidad de video"
           bind:value={options.videoHeight}
-          class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          class="tap w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           <option value={null}>Mejor disponible</option>
           {#each heights as height (height)}
@@ -198,7 +198,7 @@
         <select
           aria-label="Contenedor de video"
           bind:value={options.container}
-          class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          class="tap w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           {#each VIDEO_CONTAINERS as container (container.id)}
             <option value={container.id} disabled={container.id === "mp4" && mp4Blocked}>
@@ -215,7 +215,7 @@
         <select
           aria-label="Formato de audio"
           bind:value={options.audioFormat}
-          class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          class="tap w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           {#each AUDIO_FORMATS as format (format.id)}
             <option value={format.id}>{format.label}</option>
@@ -231,7 +231,7 @@
           aria-label="Calidad de audio"
           bind:value={options.audioQuality}
           disabled={!showQuality}
-          class="w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-40"
+          class="tap w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent disabled:cursor-not-allowed disabled:opacity-40"
         >
           {#each AUDIO_QUALITIES as quality (quality.id)}
             <option value={quality.id}>{quality.label}</option>
@@ -261,10 +261,10 @@
           aria-label="Ajuste de volumen en decibelios"
           disabled={options.audioFormat === "best" && options.mode === "audio"}
           bind:value={options.volumeDb}
-          class="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-elevated accent-accent disabled:cursor-not-allowed disabled:opacity-40"
+          class="tap h-1 flex-1 cursor-pointer appearance-none rounded-full bg-elevated accent-accent disabled:cursor-not-allowed disabled:opacity-40"
         />
         <button
-          class="shrink-0 rounded-md border border-line px-2 py-0.5 text-[11px] text-ink-soft transition-colors hover:bg-surface hover:text-ink"
+          class="tap shrink-0 rounded-md border border-line px-2 py-0.5 text-[11px] text-ink-soft transition-colors hover:bg-surface hover:text-ink"
           onclick={() => (options.volumeDb = 0)}
         >
           Reset
@@ -274,28 +274,28 @@
 
     <!-- Interruptores -->
     <div class="col-span-2 flex flex-wrap items-center gap-x-6 gap-y-2 pt-0.5">
-      <label class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
+      <label class="tap flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
         <input
           type="checkbox"
           bind:checked={options.normalizeAudio}
           disabled={options.audioFormat === "best" && options.mode === "audio"}
-          class="size-3.5 accent-accent"
+          class="size-3.5 max-md:size-5 accent-accent"
         />
         Normalizar volumen
       </label>
-      <label class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
+      <label class="tap flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
         <input
           type="checkbox"
           bind:checked={options.embedMetadata}
-          class="size-3.5 accent-accent"
+          class="size-3.5 max-md:size-5 accent-accent"
         />
         Incrustar metadatos
       </label>
-      <label class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
+      <label class="tap flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
         <input
           type="checkbox"
           bind:checked={options.embedThumbnail}
-          class="size-3.5 accent-accent"
+          class="size-3.5 max-md:size-5 accent-accent"
         />
         Incrustar miniatura
       </label>
@@ -309,7 +309,7 @@
         >
         {#if options.clipStart != null || clipStartText || clipEndText}
           <button
-            class="text-[11px] text-ink-muted transition-colors hover:text-ink-strong"
+            class="tap text-[11px] text-ink-muted transition-colors hover:text-ink-strong"
             onclick={() => {
               clipStartText = "";
               clipEndText = "";
@@ -328,7 +328,7 @@
           aria-label="Inicio del recorte"
           bind:value={clipStartText}
           oninput={syncClip}
-          class="w-28 rounded-lg border bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent {clipError
+          class="tap w-28 rounded-lg border bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent {clipError
             ? 'border-danger-bg/60'
             : 'border-line'}"
         />
@@ -340,7 +340,7 @@
           aria-label="Fin del recorte"
           bind:value={clipEndText}
           oninput={syncClip}
-          class="w-28 rounded-lg border bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent {clipError
+          class="tap w-28 rounded-lg border bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent {clipError
             ? 'border-danger-bg/60'
             : 'border-line'}"
         />
@@ -365,12 +365,12 @@
       <div class="col-span-2 border-t border-line/40 pt-3">
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
           <label
-            class="flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-wide text-ink-muted"
+            class="tap flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-wide text-ink-muted"
           >
             <input
               type="checkbox"
               bind:checked={options.subtitles}
-              class="size-3.5 accent-accent"
+              class="size-3.5 max-md:size-5 accent-accent"
             />
             Subtítulos
           </label>
@@ -380,25 +380,25 @@
               placeholder="idiomas: es,en"
               aria-label="Idiomas de subtítulos"
               bind:value={options.subtitleLangs}
-              class="w-36 rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+              class="tap w-36 rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
             />
             <label
-              class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft"
+              class="tap flex cursor-pointer items-center gap-2 text-xs text-ink-soft"
             >
               <input
                 type="checkbox"
                 bind:checked={options.subtitleAuto}
-                class="size-3.5 accent-accent"
+                class="size-3.5 max-md:size-5 accent-accent"
               />
               Automáticos
             </label>
             <label
-              class="flex cursor-pointer items-center gap-2 text-xs text-ink-soft"
+              class="tap flex cursor-pointer items-center gap-2 text-xs text-ink-soft"
             >
               <input
                 type="checkbox"
                 bind:checked={options.embedSubtitles}
-                class="size-3.5 accent-accent"
+                class="size-3.5 max-md:size-5 accent-accent"
               />
               Incrustar en el vídeo
             </label>
@@ -411,12 +411,12 @@
     <div class="col-span-2 border-t border-line/40 pt-3">
       <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
         <label
-          class="flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-wide text-ink-muted"
+          class="tap flex cursor-pointer items-center gap-2 text-[11px] uppercase tracking-wide text-ink-muted"
         >
           <input
             type="checkbox"
             bind:checked={options.sponsorblock}
-            class="size-3.5 accent-accent"
+            class="size-3.5 max-md:size-5 accent-accent"
           />
           SponsorBlock
         </label>
@@ -424,7 +424,7 @@
           <div class="flex rounded-lg border border-line bg-canvas/60 p-0.5">
             {#each sponsorblockModes as mode (mode.id)}
               <button
-                class="rounded-md px-2.5 py-0.5 text-[11px] transition-colors {options.sponsorblockMode ===
+                class="tap rounded-md px-2.5 py-0.5 text-[11px] transition-colors {options.sponsorblockMode ===
                 mode.id
                   ? 'bg-elevated text-ink'
                   : 'text-ink-muted hover:text-ink-strong'}"
@@ -441,14 +441,14 @@
         <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
           {#each SPONSORBLOCK_CATEGORIES as category (category.id)}
             <label
-              class="flex cursor-pointer items-center gap-1.5 text-xs text-ink-soft"
+              class="tap flex cursor-pointer items-center gap-1.5 text-xs text-ink-soft"
               title={category.description}
             >
               <input
                 type="checkbox"
                 checked={options.sponsorblockCategories.includes(category.id)}
                 onchange={() => toggleCategory(category.id)}
-                class="size-3.5 accent-accent"
+                class="size-3.5 max-md:size-5 accent-accent"
               />
               {category.label}
             </label>
@@ -489,7 +489,7 @@
   >
     <span class="truncate text-xs text-ink-muted">{summary}</span>
     <button
-      class="flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+      class="tap flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       disabled={starting || disabled}
       onclick={onDownload}
     >
