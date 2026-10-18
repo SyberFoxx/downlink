@@ -14,6 +14,17 @@ pub enum CookiesMode {
     File,
 }
 
+/// Qué hacer cuando otra app comparte un enlace con Downlink (Android).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ShareAction {
+    /// Analizarlo y ponerlo a descargar con las opciones actuales.
+    #[default]
+    Download,
+    /// Solo analizarlo y mostrar la vista previa para elegir opciones.
+    Preview,
+}
+
 /// Descargas simultáneas por defecto.
 const DEFAULT_CONCURRENCY: u32 = 2;
 
@@ -95,6 +106,9 @@ pub struct Settings {
     /// Node.js a mano.
     #[serde(default = "default_true")]
     pub auto_download_js_runtime: bool,
+    /// Qué hacer al recibir un enlace compartido desde otra app.
+    #[serde(default)]
+    pub share_action: ShareAction,
     /// Carpeta de destino de las descargas. `None` = la estándar del sistema.
     #[serde(default)]
     pub download_dir: Option<String>,
@@ -122,6 +136,7 @@ impl Default for Settings {
             auto_update_ytdlp: true,
             auto_download_ffmpeg: true,
             auto_download_js_runtime: true,
+            share_action: ShareAction::Download,
             download_dir: None,
             persist_queue: true,
             notify_on_finish: true,
@@ -454,6 +469,16 @@ mod tests {
         assert!(settings.notify_on_finish);
         assert!(!settings.close_to_tray);
         assert!(settings.auto_download_js_runtime);
+        assert_eq!(settings.share_action, ShareAction::Download);
+    }
+
+    #[test]
+    fn el_ajuste_de_compartir_viaja_en_minusculas() {
+        // La interfaz manda estos literales; si cambian, el ajuste se ignora.
+        let json = serde_json::to_string(&ShareAction::Preview).expect("serializa");
+        assert_eq!(json, "\"preview\"");
+        let leido: ShareAction = serde_json::from_str("\"download\"").expect("deserializa");
+        assert_eq!(leido, ShareAction::Download);
     }
 
     /// Base de prueba portable (los tests corren en cualquier sistema).

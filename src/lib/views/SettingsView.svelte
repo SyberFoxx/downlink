@@ -18,8 +18,8 @@
   import EngineUpdateRow from "$lib/components/EngineUpdateRow.svelte";
   import { settings } from "$lib/settings.svelte";
   import { toast } from "$lib/toast.svelte";
-  import { extractError } from "$lib/utils";
-  import type { BrowserInfo, CookiesMode, EngineInfo } from "$lib/types";
+  import { extractError, isAndroid } from "$lib/utils";
+  import type { BrowserInfo, CookiesMode, EngineInfo, ShareAction } from "$lib/types";
 
   const TEST_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
 
@@ -52,6 +52,21 @@
       id: "file",
       label: "Archivo cookies.txt",
       description: "Si usas un navegador portátil o quieres control manual",
+    },
+  ];
+
+  const shareModes: { id: ShareAction; label: string; description: string }[] = [
+    {
+      id: "download",
+      label: "Descargar directamente",
+      description:
+        "Empieza a descargar con las opciones de la vista Descargar, sin pasos intermedios",
+    },
+    {
+      id: "preview",
+      label: "Mostrar la vista previa",
+      description:
+        "Te deja elegir calidad, formato y carpeta antes de descargar",
     },
   ];
 
@@ -338,6 +353,42 @@
       onChanged={refreshEngine}
     />
   </section>
+
+  <!-- Compartir desde otras apps (solo Android) -->
+  {#if isAndroid()}
+    <section class="mb-8">
+      <h2 class="mb-1 text-sm font-medium text-ink-strong">
+        Compartir desde otras apps
+      </h2>
+      <p class="mb-4 text-xs text-ink-muted">
+        Al compartir un enlace desde YouTube o cualquier otra app, Downlink lo recibe
+        al momento. Elige qué quieres que haga con él.
+      </p>
+
+      <div class="space-y-2">
+        {#each shareModes as mode (mode.id)}
+          <label
+            class="flex cursor-pointer items-start gap-3 rounded-lg border px-3.5 py-2.5 transition-colors {settings.value
+              .shareAction === mode.id
+              ? 'border-accent/60 bg-accent/5'
+              : 'border-line bg-surface/30 hover:border-line-strong'}"
+          >
+            <input
+              type="radio"
+              name="share-action"
+              value={mode.id}
+              bind:group={settings.value.shareAction}
+              class="mt-0.5 size-3.5 max-md:size-5 accent-accent"
+            />
+            <span class="min-w-0">
+              <span class="block text-sm text-ink">{mode.label}</span>
+              <span class="block text-xs text-ink-muted">{mode.description}</span>
+            </span>
+          </label>
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   <!-- Cola -->
   <section class="mb-8">

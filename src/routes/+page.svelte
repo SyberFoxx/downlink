@@ -10,7 +10,9 @@
     QUEUE_DRAG_TYPE,
     extractUrls,
     handleIncoming,
+    handleShared,
     startQueueListener,
+    startShareListener,
   } from "$lib/downloads.svelte";
   import type { AppView } from "$lib/types";
   import AppearanceView from "$lib/views/AppearanceView.svelte";
@@ -45,6 +47,15 @@
     if (extractUrls(text).length === 0) return;
     view = "descargas";
     await handleIncoming(text);
+  }
+
+  /**
+   * Enlace compartido desde otra app (Android): salta a Descargas para que se vea
+   * el resultado y lo trata según lo elegido en Ajustes.
+   */
+  async function onShared(text: string) {
+    view = "descargas";
+    await handleShared(text);
   }
 
   function isExternalDrag(e: DragEvent): boolean {
@@ -96,6 +107,8 @@
     // Igual con la barra de motores: la app se descarga yt-dlp/ffmpeg al
     // arrancar y el aviso tiene que verse aunque estés en otra vista.
     const unlistenEngine = startEngineListener();
+    // Y con los enlaces que comparten otras apps (solo Android).
+    const unlistenShare = startShareListener(onShared);
 
     const onPaste = (e: ClipboardEvent) => {
       const target = e.target;
@@ -120,6 +133,7 @@
     return () => {
       unlistenQueue.then((un) => un());
       unlistenEngine.then((un) => un());
+      unlistenShare.then((un) => un());
       window.removeEventListener("paste", onPaste);
       window.removeEventListener("dragenter", onDragEnter);
       window.removeEventListener("dragleave", onDragLeave);

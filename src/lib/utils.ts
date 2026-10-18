@@ -43,6 +43,14 @@ export function extractError(e: unknown): string {
   return "Error inesperado";
 }
 
+/**
+ * ¿Corre dentro del WebView de Android? Solo ahí existen el *share intent* y el
+ * aviso de enlaces compartidos; en el escritorio no hay nada que recibir.
+ */
+export function isAndroid(): boolean {
+  return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+}
+
 const DATE_FORMAT = new Intl.DateTimeFormat("es", {
   day: "2-digit",
   month: "short",
