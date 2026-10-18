@@ -109,7 +109,7 @@
       aria-label="Enlace del vídeo a descargar"
       bind:value={downloads.url}
       placeholder="https://www.youtube.com/watch?v=..."
-      class="w-full rounded-lg border border-line bg-surface/50 py-3 pl-10 pr-28 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-accent"
+      class="tap w-full rounded-lg border border-line bg-surface/50 py-3 pl-10 pr-28 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-accent"
       onkeydown={(e) => {
         if (e.key === "Enter") analyze();
       }}
@@ -121,7 +121,7 @@
       }}
     />
     <button
-      class="absolute right-1.5 top-1.5 bottom-1.5 rounded-md bg-accent px-4 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+      class="tap tap-center absolute right-1.5 top-1.5 bottom-1.5 max-md:top-1/2 max-md:bottom-auto max-md:-translate-y-1/2 rounded-md bg-accent px-4 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
       disabled={probing || !downloads.url.trim()}
       onclick={() => analyze()}
     >
@@ -164,9 +164,9 @@
       role="alert"
     >
       <div class="flex items-start justify-between gap-3">
-        <p class="whitespace-pre-line">{errorMessage}</p>
+        <p class="copyable whitespace-pre-line">{errorMessage}</p>
         <button
-          class="-mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-danger/70 transition-colors hover:bg-danger-bg/40 hover:text-danger"
+          class="tap tap-center -mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-danger/70 transition-colors hover:bg-danger-bg/40 hover:text-danger"
           aria-label="Cerrar el aviso de error"
           onclick={() => (downloads.errorMessage = null)}
         >
@@ -177,7 +177,7 @@
       </div>
       {#if needsCookies}
         <button
-          class="mt-2.5 rounded-md bg-danger-bg/40 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-bg/60"
+          class="tap mt-2.5 rounded-md bg-danger-bg/40 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger-bg/60"
           onclick={onGoToSettings}
         >
           Configurar cookies en Ajustes →

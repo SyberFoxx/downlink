@@ -114,7 +114,7 @@
     </div>
     {#if entries.length > 0}
       <button
-        class="shrink-0 rounded-md border px-3 py-1.5 text-xs transition-colors {confirmingClear
+        class="tap shrink-0 rounded-md border px-3 py-1.5 text-xs transition-colors {confirmingClear
           ? 'border-danger-bg/60 text-danger'
           : 'border-line text-ink-soft hover:border-danger-bg/60 hover:text-danger'}"
         onclick={requestClear}
@@ -144,7 +144,7 @@
         aria-label="Buscar en el historial"
         bind:value={query}
         placeholder="Buscar por título o enlace…"
-        class="w-full rounded-lg border border-line bg-surface/50 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-accent"
+        class="tap w-full rounded-lg border border-line bg-surface/50 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition-colors placeholder:text-ink-faint focus:border-accent"
       />
     </div>
   {/if}
@@ -155,9 +155,9 @@
       role="alert"
     >
       <div class="flex items-start justify-between gap-3">
-        <p class="whitespace-pre-line">{errorMessage}</p>
+        <p class="copyable whitespace-pre-line">{errorMessage}</p>
         <button
-          class="-mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-danger/70 transition-colors hover:bg-danger-bg/40 hover:text-danger"
+          class="tap tap-center -mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-danger/70 transition-colors hover:bg-danger-bg/40 hover:text-danger"
           aria-label="Cerrar el aviso de error"
           onclick={() => (errorMessage = null)}
         >
@@ -235,14 +235,14 @@
 
             <div class="mt-auto flex items-center gap-1.5 pt-3">
               <button
-                class="flex-1 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:opacity-50"
+                class="tap flex-1 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:opacity-50"
                 disabled={busy === entry.url}
                 onclick={() => redownload(entry)}
               >
                 {busy === entry.url ? "Añadiendo…" : "Re-descargar"}
               </button>
               <button
-                class="rounded-md border border-line p-1.5 text-ink-soft transition-colors hover:border-line-strong hover:text-ink disabled:opacity-40"
+                class="tap tap-center rounded-md border border-line p-1.5 text-ink-soft transition-colors hover:border-line-strong hover:text-ink disabled:opacity-40"
                 title="Mostrar en la carpeta"
                 disabled={!entry.filePath}
                 onclick={() => reveal(entry)}
@@ -252,7 +252,7 @@
                 </svg>
               </button>
               <button
-                class="rounded-md border border-line p-1.5 text-ink-soft transition-colors hover:border-danger-bg/60 hover:text-danger"
+                class="tap tap-center rounded-md border border-line p-1.5 text-ink-soft transition-colors hover:border-danger-bg/60 hover:text-danger"
                 title="Quitar del historial"
                 onclick={() => remove(entry)}
               >

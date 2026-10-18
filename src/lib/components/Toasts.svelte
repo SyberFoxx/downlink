@@ -11,7 +11,7 @@
 
 <!-- Pila de avisos globales. `aria-live` anuncia cada aviso sin robar el foco. -->
 <div
-  class="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"
+  class="pointer-events-none fixed bottom-4 right-4 z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 max-md:bottom-[calc(var(--nav-height)+env(safe-area-inset-bottom)+0.5rem)]"
   role="status"
   aria-live="polite"
 >
@@ -32,7 +32,7 @@
         <p class="mt-0.5 break-words whitespace-pre-line">{item.message}</p>
       </div>
       <button
-        class="-m-0.5 shrink-0 rounded-md p-1 opacity-60 transition-opacity hover:opacity-100"
+        class="tap tap-center -m-0.5 shrink-0 rounded-md p-1 opacity-60 transition-opacity hover:opacity-100"
         aria-label="Cerrar aviso"
         onclick={() => toast.dismiss(item.id)}
       >

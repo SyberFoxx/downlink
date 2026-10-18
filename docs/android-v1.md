@@ -7,8 +7,9 @@ fases. Las referencias son del árbol en v0.10.0 (`archivo:línea`).
 - **Fuera de alcance**: **iOS**. La arquitectura de Downlink se apoya en lanzar
   `yt-dlp` y `ffmpeg` como **procesos externos**, y iOS no permite crear
   procesos hijos desde una app. No es un problema de esfuerzo, es de plataforma.
-- **Estado**: pendiente de empezar. Orden acordado: **primero la interfaz móvil**
-  (fase A), después el andamiaje y el motor nativo.
+- **Estado**: fase A (interfaz móvil) casi lista: el armazón ya está adaptado y
+  medido en navegador. Quedan los **gestos** para reordenar la cola y el pegado
+  por *share intent*; después, el andamiaje Android y el motor nativo.
 
 ## Resumen
 
@@ -196,13 +197,24 @@ navegador real a 390×844.
 - [x] Tipografía base a 17 px en móvil (todo lo que mide en `rem` escala).
 - [x] Desactivar en móvil el fondo con desenfoque.
 - [x] Objetivos táctiles de la navegación a 51 px de alto (era 32 px).
-- [ ] Objetivos táctiles ≥ 44 px en el resto de botones e iconos: hoy el más
-      pequeño mide 26 px. Pendiente.
-- [ ] Feedback de pulsación (`active:`) en los controles, ahora que los `hover:`
-      quedan fuera del táctil solos.
+- [x] Objetivos táctiles ≥ 44 px en el resto de botones e iconos. El más pequeño
+      medía 26 px; ahora **ninguno baja de 44** en ninguna de las seis pantallas
+      (cola, opciones, playlist, historial, apariencia y ajustes), medido en un
+      navegador real con `hover: none` y `pointer: coarse`. Se resuelve con `.tap`
+      (mínimo 44 px) y `.tap-center` (centra el icono) en `app.css`, solo en la
+      franja de móvil, así que el escritorio conserva sus tamaños.
+- [x] La barra de progreso pasa a lo ancho, debajo de la fila, en móvil: junto a
+      los botones de 44 px no cabía y se quedaba en 0 px (ahora mide 263 px).
+- [x] Los avisos emergentes se colocan por encima de la navegación inferior (antes
+      la tapaban); su altura vive en `--nav-height`.
+- [x] Feedback de pulsación en los controles: donde no hay ratón (`hover: none` y
+      `pointer: coarse`) todo lo pulsable se atenúa al presionarlo. El escritorio
+      sigue igual.
 - [ ] Reordenar la cola con **gestos** (Pointer Events) en vez de HTML5 drag & drop.
-- [ ] `user-select: none` revisado para que se pueda copiar texto (hoy se puede
-      seleccionar solo dentro de campos de formulario, `app.css:64`).
+- [x] `user-select: none` revisado: el texto que conviene copiar (el error de una
+      descarga, la ruta del archivo, el resultado de la prueba de conexión) lleva
+      `.copyable` y se puede seleccionar; el resto de la interfaz sigue sin
+      seleccionarse a propósito (`app.css:64`).
 - [ ] Pegado por *share intent* en vez de `Ctrl+V`.
 
 ### Fase B — Andamiaje Android

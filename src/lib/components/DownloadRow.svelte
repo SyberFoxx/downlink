@@ -75,6 +75,19 @@
   let streamLabel = $derived(job.stream ? (STREAM_LABEL[job.stream] ?? null) : null);
 </script>
 
+{#snippet progressBar()}
+  <div class="h-1.5 overflow-hidden rounded-full bg-elevated">
+    {#if indeterminate}
+      <div class="progress-indeterminate h-full w-1/3 rounded-full bg-warn"></div>
+    {:else}
+      <div
+        class="h-full rounded-full bg-accent-hover transition-[width] duration-300"
+        style="width: {Math.min(percent ?? 0, 100)}%"
+      ></div>
+    {/if}
+  </div>
+{/snippet}
+
 <div
   class="rounded-xl border bg-surface/40 px-4 py-3 transition-colors {dragging
     ? 'border-accent/70 opacity-60'
@@ -171,14 +184,16 @@
           En pausa — reanuda desde donde iba
         </p>
       {:else if status === "done" && job.message}
-        <p class="mt-0.5 whitespace-pre-wrap text-xs text-warn/90">{job.message}</p>
+        <p class="copyable mt-0.5 whitespace-pre-wrap text-xs text-warn/90"
+          >{job.message}</p
+        >
       {:else if status === "done" && job.filePath}
-        <p class="mt-0.5 truncate font-mono text-xs text-ink-faint">
+        <p class="copyable mt-0.5 truncate font-mono text-xs text-ink-faint">
           {job.filePath}
         </p>
       {:else if status === "error"}
         <p
-          class="mt-0.5 whitespace-pre-wrap text-xs text-danger/90"
+          class="copyable mt-0.5 whitespace-pre-wrap text-xs text-danger/90"
         >{job.message ?? "Error desconocido"}</p>
       {:else if status === "cancelled"}
         <p class="mt-0.5 text-xs text-ink-muted">Cancelado</p>
@@ -186,23 +201,16 @@
     </div>
 
     <!-- Progreso / acciones -->
-    <div class="flex w-44 shrink-0 items-center justify-end gap-1.5">
+    <div class="flex w-44 shrink-0 items-center justify-end gap-1.5 max-md:w-auto">
       {#if showBar}
-        <div class="mr-1 h-1.5 flex-1 overflow-hidden rounded-full bg-elevated">
-          {#if indeterminate}
-            <div class="progress-indeterminate h-full w-1/3 rounded-full bg-warn"></div>
-          {:else}
-            <div
-              class="h-full rounded-full bg-accent-hover transition-[width] duration-300"
-              style="width: {Math.min(percent ?? 0, 100)}%"
-            ></div>
-          {/if}
-        </div>
+        <!-- En móvil la barra se va debajo del título (ver más abajo): aquí solo
+             hay ancho para los botones. -->
+        <div class="mr-1 hidden flex-1 md:block">{@render progressBar()}</div>
       {/if}
 
       {#if status === "downloading" || status === "processing"}
         <button
-          class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
+          class="rounded-md p-1 text-ink-muted transition-colors tap tap-center hover:bg-elevated hover:text-ink"
           title="Pausar"
           aria-label="Pausar descarga"
           onclick={() => onPause(job.id)}
@@ -215,7 +223,7 @@
 
       {#if status === "paused"}
         <button
-          class="rounded-md p-1 text-ok transition-colors hover:bg-elevated"
+          class="rounded-md p-1 text-ok transition-colors tap tap-center hover:bg-elevated"
           title="Reanudar"
           aria-label="Reanudar descarga"
           onclick={() => onResume(job.id)}
@@ -228,7 +236,7 @@
 
       {#if status === "done" && job.filePath}
         <button
-          class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
+          class="rounded-md p-1 text-ink-muted transition-colors tap tap-center hover:bg-elevated hover:text-ink"
           title="Mostrar en la carpeta"
           aria-label="Mostrar el archivo en la carpeta"
           onclick={() => onReveal(job)}
@@ -241,7 +249,7 @@
 
       {#if status === "error" || status === "cancelled"}
         <button
-          class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-accent"
+          class="rounded-md p-1 text-ink-muted transition-colors tap tap-center hover:bg-elevated hover:text-accent"
           title="Reintentar"
           aria-label="Reintentar descarga"
           onclick={() => onRetry(job.id)}
@@ -254,7 +262,7 @@
 
       {#if status !== "done"}
         <button
-          class="rounded-md p-1 text-ink-muted transition-colors hover:bg-elevated hover:text-ink-strong"
+          class="rounded-md p-1 text-ink-muted transition-colors tap tap-center hover:bg-elevated hover:text-ink-strong"
           title={status === "error" || status === "cancelled"
             ? "Quitar de la lista"
             : status === "queued" || status === "paused"
@@ -272,4 +280,10 @@
       {/if}
     </div>
   </div>
+
+  <!-- En móvil el progreso va a lo ancho, debajo de la fila: junto a los botones
+       (44 px cada uno) no cabría. -->
+  {#if showBar}
+    <div class="mt-2.5 md:hidden">{@render progressBar()}</div>
+  {/if}
 </div>

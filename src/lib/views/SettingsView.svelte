@@ -177,7 +177,7 @@
             name="cookies-mode"
             value={mode.id}
             bind:group={settings.value.cookiesMode}
-            class="mt-0.5 size-3.5 accent-accent"
+            class="mt-0.5 size-3.5 max-md:size-5 accent-accent"
           />
           <span class="min-w-0">
             <span class="block text-sm text-ink">{mode.label}</span>
@@ -198,7 +198,7 @@
           <select
             bind:value={settings.value.cookiesBrowser}
             aria-label="Navegador del que extraer cookies"
-            class="w-full rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+            class="tap w-full rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
           >
             {#each browsers as browser (browser.id)}
               <option value={browser.id}>{browser.label}</option>
@@ -217,10 +217,10 @@
             type="text"
             bind:value={settings.value.cookiesFile}
             placeholder="/ruta/a/cookies.txt"
-            class="min-w-0 flex-1 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+            class="tap min-w-0 flex-1 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
           />
           <button
-            class="rounded-lg border border-line px-3 text-sm text-ink-strong transition-colors hover:bg-surface"
+            class="tap rounded-lg border border-line px-3 text-sm text-ink-strong transition-colors hover:bg-surface"
             onclick={chooseFile}
           >
             Elegir…
@@ -350,7 +350,7 @@
       <select
         bind:value={settings.value.concurrency}
         aria-label="Descargas simultáneas"
-        class="w-40 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+        class="tap w-40 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
       >
         {#each [1, 2, 3, 4, 6, 8] as n (n)}
           <option value={n}>{n} simultánea{n === 1 ? "" : "s"}</option>
@@ -379,17 +379,17 @@
           ? `Sistema · ${systemDir}`
           : "Carpeta de Descargas del sistema"}
         aria-label="Carpeta de destino de las descargas"
-        class="min-w-0 flex-1 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+        class="tap min-w-0 flex-1 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
       />
       <button
-        class="rounded-lg border border-line px-3 text-sm text-ink-strong transition-colors hover:bg-surface"
+        class="tap rounded-lg border border-line px-3 text-sm text-ink-strong transition-colors hover:bg-surface"
         onclick={chooseFolder}
       >
         Elegir…
       </button>
       {#if settings.value.downloadDir}
         <button
-          class="rounded-lg border border-line px-3 text-sm text-ink-soft transition-colors hover:bg-surface hover:text-ink"
+          class="tap rounded-lg border border-line px-3 text-sm text-ink-soft transition-colors hover:bg-surface hover:text-ink"
           onclick={() => (settings.value.downloadDir = null)}
         >
           Usar la del sistema
@@ -401,11 +401,11 @@
     </p>
 
     <div class="mt-4 space-y-3">
-      <label class="flex cursor-pointer items-start gap-3">
+      <label class="tap flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"
           bind:checked={settings.value.persistQueue}
-          class="mt-0.5 size-3.5 accent-accent"
+          class="mt-0.5 size-3.5 max-md:size-5 accent-accent"
         />
         <span class="min-w-0">
           <span class="block text-sm text-ink">Reanudar la cola al abrir la app</span>
@@ -415,11 +415,11 @@
         </span>
       </label>
 
-      <label class="flex cursor-pointer items-start gap-3">
+      <label class="tap flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"
           bind:checked={settings.value.notifyOnFinish}
-          class="mt-0.5 size-3.5 accent-accent"
+          class="mt-0.5 size-3.5 max-md:size-5 accent-accent"
         />
         <span class="min-w-0">
           <span class="block text-sm text-ink">Avisar al terminar cada descarga</span>
@@ -430,7 +430,7 @@
       </label>
 
       <label
-        class="flex items-start gap-3 {trayOk === false
+        class="tap flex items-start gap-3 {trayOk === false
           ? 'cursor-not-allowed opacity-50'
           : 'cursor-pointer'}"
       >
@@ -438,7 +438,7 @@
           type="checkbox"
           bind:checked={settings.value.closeToTray}
           disabled={trayOk === false}
-          class="mt-0.5 size-3.5 accent-accent"
+          class="mt-0.5 size-3.5 max-md:size-5 accent-accent"
         />
         <span class="min-w-0">
           <span class="block text-sm text-ink">
@@ -462,7 +462,7 @@
     </p>
     <div class="flex items-center gap-3">
       <button
-        class="rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:opacity-50"
+        class="tap rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:opacity-50"
         disabled={testing || !loaded}
         onclick={testConnection}
       >
@@ -470,7 +470,7 @@
       </button>
       {#if testResult}
         <p
-          class="max-w-2xl whitespace-pre-wrap text-xs {testResult.ok
+          class="copyable max-w-2xl whitespace-pre-wrap text-xs {testResult.ok
             ? 'text-ok'
             : 'text-danger'}"
           role="status"
@@ -485,7 +485,7 @@
   <!-- Guardar -->
   <div class="flex items-center gap-3">
     <button
-      class="rounded-md border border-line-strong px-4 py-1.5 text-sm text-ink transition-colors hover:bg-surface disabled:opacity-50"
+      class="tap rounded-md border border-line-strong px-4 py-1.5 text-sm text-ink transition-colors hover:bg-surface disabled:opacity-50"
       disabled={saving || !loaded}
       onclick={save}
     >
