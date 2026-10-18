@@ -7,6 +7,19 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-10-18
+
+### Changed
+- **El AppImage arranca en muchas más distribuciones**: se construye sobre Ubuntu 22.04 en vez de la última, así que exige glibc 2.35 y no 2.39. En Zorin, Debian estable, Linux Mint, Pop!_OS y demás sistemas con glibc más antigua, el binario ya no falla al iniciarse
+- **Instalación por distribución en los dos README**: una tabla con el comando exacto para cada familia —`apt` en Debian/Ubuntu/Zorin/Pop!_OS/Mint/Kali/KDE neon, `dnf` en Fedora/RHEL/CentOS Stream/Rocky/Alma/Nobara, `zypper` en openSUSE, `pacman` en Arch/Manjaro/EndeavourOS/CachyOS/Garuda y AppImage en el resto— y una sección del AppImage con los requisitos y los problemas más frecuentes (`libfuse.so.2`, `GLIBC_… not found`, ventana en blanco, falta de entrada en el menú)
+- **MP4 solo hasta 1080p**: si eliges MP4 con resolución mayor, la descarga pasa a **MKV** para no perder calidad y se conserva el códec original. La opción lo explica y se marca sola en el panel de opciones, así que las 4K se bajan en MKV sin que tengas que pensarlo
+
+### Fixed
+- **La descarga ya no se queda «colgada» durante el postprocesado**: la app usa `--print` para conocer la ruta final y eso activa el modo silencioso de yt-dlp, así que los avisos de la mezcla, los metadatos y la miniatura no llegaban nunca y el trabajo seguía en «Descargando» con la barra al 100 % —como si no terminara de validar—. Ahora se ve «Mezclando vídeo y audio…», «Escribiendo los metadatos…», «Incrustando la carátula…» y, al acabar, «Completado»
+- **La barra de progreso ya no vuelve a cero**: una descarga con mezcla baja primero el vídeo y luego el audio, y yt-dlp reiniciaba el contador en cada uno. Ahora la barra mide el trabajo completo (de 0 a 100 % sin retrocesos) y los bytes, la velocidad y el tiempo restante se refieren al conjunto, no al archivo de turno
+- La fila indica **qué está bajando** («Vídeo» o «Audio») y, cuando aún no hay porcentaje, la barra se mueve sola en vez de quedarse quieta
+- **Se comprueba que el archivo exista antes de dar la descarga por buena**: si yt-dlp termina sin error pero el archivo no está donde dijo, la descarga se marca como fallida con el motivo y se puede reintentar, en lugar de aparecer como completada sin más
+
 ## [0.10.3] - 2026-10-17
 
 ### Added
