@@ -7,6 +7,23 @@ y el proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+- **Android (arm64)**: la app ya funciona en el teléfono. Los motores (**yt-dlp, ffmpeg, ffprobe, Python y QuickJS**) van empaquetados dentro del APK, así que no hay que instalar nada aparte; los archivos terminados se publican en la **galería del dispositivo** (MediaStore) y se abren con el visor del sistema
+- **Descargas en segundo plano en Android**: un **servicio en primer plano** con notificación permanente mantiene la descarga viva aunque salgas de la app o **apagues la pantalla**, mostrando el progreso de la cola en la propia notificación
+- **Elección de fondo de pantalla y cookies en Android**: se eligen desde la galería/el gestor de archivos (SAF) y se copian al almacenamiento privado de la app, porque el permiso de origen es temporal
+- Sección **«Acerca de»** en Ajustes, con guía rápida, versión y enlaces al repositorio y a la documentación
+- **APK de publicación firmado** con su propio almacén de claves
+
+### Changed
+- **Un solo README con banner**: el banner del proyecto abre el README en inglés y en español, y el logotipo pasa a leerse de `static/brand/icon.svg` (fuente única, también en la interfaz)
+- El logotipo de la interfaz carga el SVG de marca en vez de duplicarlo dentro del componente
+- Los presets de paleta de Apariencia van en **una sola rejilla**, sin el hueco vacío que se veía en pantalla estrecha
+
+### Fixed
+- **El desenfoque del fondo ya funciona en Android**: se había desactivado por completo en móvil con un `filter: none`; ahora el control de desenfoque hace su trabajo también en el teléfono
+- El desplegable de **calidad** ya no envía la cadena `"null"`: usa un valor centinela para «la mejor calidad», así que la opción elegida es la que realmente se aplica
+- Un **`NoSuchMethodError` al terminar una descarga en Android** cerraba la app: la firma JNI del servicio no coincidía con la del método Kotlin. Las firmas ahora se comprueban y se separan las llamadas con argumentos de las que no los llevan
+
 ## [0.10.4] - 2026-10-18
 
 ### Changed

@@ -1,10 +1,12 @@
 <div align="center">
 
+<img src="docs/banner.jpeg" alt="Downlink" width="100%" />
+
 <img src="static/brand/icon.svg" alt="Logotipo de Downlink" width="84" height="84" />
 
 # Downlink
 
-**Descargador de vídeo y audio para escritorio, con una interfaz moderna**
+**Descargador de vídeo y audio para escritorio y Android, con una interfaz moderna**
 
 [![CI](https://github.com/SyberFoxx/downlink/actions/workflows/ci.yml/badge.svg)](https://github.com/SyberFoxx/downlink/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -19,9 +21,9 @@
 
 ## ¿Qué es Downlink?
 
-Downlink es una aplicación de escritorio (y, próximamente, Android) para descargar vídeo y audio de **más de 1800 sitios web** —YouTube, TikTok, Instagram, X/Twitter, Twitch, Reddit y muchos más— con una interfaz limpia, rápida y pensada para el usuario final.
+Downlink es una aplicación para **escritorio y Android** que descarga vídeo y audio de **más de 1800 sitios web** —YouTube, TikTok, Instagram, X/Twitter, Twitch, Reddit y muchos más— con una interfaz limpia, rápida y pensada para el usuario final.
 
-Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como procesos externos: los del sistema o, si no están, copias que la propia aplicación descarga y mantiene al día. Eso da un soporte de sitios siempre actualizado sin renunciar a una experiencia nativa.
+Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como procesos externos: los del sistema o, si no están, copias que la propia aplicación descarga y mantiene al día. En Android ambos van incluidos dentro del APK, así que funciona desde el primer momento. Eso da un soporte de sitios siempre actualizado sin renunciar a una experiencia nativa.
 
 ### ¿Por qué Downlink y no otra opción?
 
@@ -29,7 +31,7 @@ Bajo el capó usa [yt-dlp](https://github.com/yt-dlp/yt-dlp) y `ffmpeg` como pro
 |---|---|---|---|
 | Interfaz moderna (Svelte 5) | ✅ | ❌ (web básica) | ⚠️ tosca |
 | Escritorio (Linux/Windows) | ✅ | ⚠️ vía navegador | ❌ |
-| Android | 🚧 planeado | ❌ | ✅ |
+| Android | ✅ | ❌ | ✅ |
 | Selector de formatos visual | ✅ | ❌ | ⚠️ |
 | Presets de un clic | ✅ | ❌ | ✅ |
 | Cola con arrastrar y soltar | ✅ | ❌ | ❌ |
@@ -101,8 +103,19 @@ Los instaladores de cada versión se publican solos en [GitHub Releases](https:/
 | Arch · Manjaro · EndeavourOS · CachyOS · Garuda | AppImage | `sudo pacman -S --needed fuse2` y luego [los pasos del AppImage](#appimage-cualquier-distro) |
 | Cualquier otra distro (Gentoo, Void, Alpine, Nix…) | AppImage | [los pasos del AppImage](#appimage-cualquier-distro) |
 | Windows 10 / 11 | `.msi` o `.exe` (NSIS) | instalar y listo |
+| **Android 7.0+** (arm64) | `.apk` | instala el APK descargado (ver [Android](#android)) |
 
 macOS todavía no tiene paquete propio (está en el [roadmap](#roadmap)); por ahora se ejecuta desde el código con `npm run tauri dev`.
+
+### Android
+
+Cada versión publica un **APK arm64-v8a**. Como no se distribuye por Play Store, Android te pedirá permiso la primera vez para instalar apps desde el gestor de archivos o el navegador.
+
+1. Descarga el `downlink-*.apk` desde [Releases](https://github.com/SyberFoxx/downlink/releases).
+2. Instálalo (acepta el aviso de «orígenes desconocidos» si aparece).
+3. Abre **Downlink** y pega un enlace.
+
+yt-dlp, ffmpeg, ffprobe, Python y QuickJS van **incluidos dentro del APK**, así que no hay nada más que instalar. Los archivos terminados se copian a la **galería del dispositivo**, donde los verás en tu app de Fotos o Música; mientras descarga, una notificación permanente mantiene el trabajo vivo aunque salgas de la app o apagues la pantalla.
 
 ### AppImage (cualquier distro)
 
@@ -139,7 +152,7 @@ Los instaladores aparecen en `src-tauri/target/release/bundle/`. En Linux hacen 
 
 ## Stack
 
-- **[Tauri 2](https://tauri.app)** — shell nativo y binario ligero para Linux y Windows (Android en camino)
+- **[Tauri 2](https://tauri.app)** — shell nativo y binario ligero para Linux, Windows y Android
 - **[Svelte 5](https://svelte.dev)** + **[SvelteKit](https://kit.svelte.dev)** — interfaz reactiva, sin DOM virtual
 - **[Rust](https://www.rust-lang.org)** — backend: cola de descargas, procesos externos y eventos en tiempo real
 - **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — motor de descarga (copia gestionada por la app o del sistema)
@@ -267,11 +280,14 @@ downlink/
 │   │   ├── history.rs       # Historial persistido (history.json)
 │   │   ├── settings.rs      # Ajustes persistidos y detección de navegadores
 │   │   ├── theme.rs         # Imagen de fondo y paleta de pywal/wallust
-│   │   ├── tray.rs          # Icono de bandeja del sistema
+│   │   ├── tray.rs          # Icono de bandeja del sistema (escritorio)
+│   │   ├── media_store.rs   # Android: publicar en la galería, abrir y elegir archivos (JNI)
+│   │   ├── foreground.rs    # Android: puente del servicio en primer plano (mantiene las descargas)
+│   │   ├── share.rs         # Android: recibir enlaces compartidos
 │   │   └── ytdlp.rs         # Argumentos, análisis y salida de yt-dlp
 │   ├── Cargo.toml
 │   └── tauri.conf.json      # Configuración de ventana, bundle e identificador
-├── docs/                    # Documentación adicional (plan de Android)
+├── docs/                    # Documentación adicional (plan y estado de Android)
 └── .github/workflows/       # CI (Linux + Windows) y publicación de releases
 ```
 
@@ -341,9 +357,13 @@ downlink/
 - [x] Progreso de descarga de los motores visible desde cualquier vista y guía de cookies por navegador en la documentación (v0.10.3)
 
 ### v1.0 — Android 📱
-- [ ] Port a Tauri 2 móvil (arm64)
-- [ ] Interfaz adaptada a móvil (gestos, navegación inferior, áreas seguras)
-- [ ] yt-dlp y ffmpeg empaquetados por arquitectura (arm64)
+- [x] Port a Tauri 2 móvil (arm64)
+- [x] Interfaz adaptada a móvil (navegación inferior, áreas seguras, objetivos táctiles)
+- [x] yt-dlp, ffmpeg, ffprobe, Python y QuickJS empaquetados dentro del APK (arm64)
+- [x] Archivos terminados publicados en la galería del dispositivo (MediaStore) y que se abren con el visor del sistema
+- [x] Descargas en segundo plano con un servicio en primer plano (sobreviven a apagar la pantalla)
+- [x] Fondo de pantalla y cookies elegidos desde la galería/SAF, copiados al almacenamiento privado
+- [x] APK de publicación firmado con su propio almacén de claves
 
 Plan detallado (bloqueantes, adaptaciones y fases): **[docs/android-v1.md](docs/android-v1.md)**.
 
