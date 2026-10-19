@@ -52,10 +52,26 @@ binario dejado en el directorio de datos de la app. La copia gestionada en
 `<app_data>/bin` no puede funcionar, y en Android no hay `PATH` de usuario.
 
 **Solución**: los **intérpretes y herramientas** (Python, ffmpeg, quickjs) van
-empaquetados como bibliotecas nativas (`jniLibs/arm64-v8a/lib*.so`, con
-`android:extractNativeLibs="true"`), que Android extrae a `nativeLibraryDir`, el
-único directorio ejecutable para una app normal. En Android, `resolve()` debe ir
-directo a esa ruta y saltarse `PATH`, sidecar y `<app_data>/bin`.
+empaquetados como bibliotecas nativas (`jniLibs/arm64-v8a/lib*.so`), que Android
+extrae a `nativeLibraryDir`, el único directorio ejecutable para una app normal. En
+Android, `resolve()` debe ir directo a esa ruta y saltarse `PATH`, sidecar y
+`<app_data>/bin`.
+
+**Ojo con `extractNativeLibs`** (esto costó un APK aparentemente correcto que no
+funcionaba): a partir de `minSdk 23`, AGP pone `android:extractNativeLibs="false"`
+por defecto y los `lib*.so` **quedan mapeados dentro del APK**, sin escribirse en
+disco. Para *cargar* una biblioteca da igual, pero aquí los motores son
+**ejecutables**: sin extracción no hay nada que lanzar y `nativeLibraryDir` no
+existe como carpeta real. Hay que forzar la extracción en los dos sitios
+(`app/build.gradle.kts` con `packaging { jniLibs { useLegacyPackaging = true } }`
+y `AndroidManifest.xml` con `android:extractNativeLibs="true"`). Se comprueba con
+`aapt2 dump xmltree --file AndroidManifest.xml <apk>`.
+
+La ruta de `nativeLibraryDir` la calcula Android en cada instalación, así que no se
+adivina: `MainActivity.onCreate` se la manda a Rust por JNI
+(`Java_com_ramses_downlink_MainActivity_pushNativeLibraryDir` →
+`engine::set_bundled_lib_dir`). `engine::detect_bundled_lib_dir()` (vía `dladdr`)
+queda solo como respaldo.
 
 `yt-dlp` **no** es un binario y no va por ahí: es un *zipapp* de Python que se
 **lee**, no se ejecuta, así que puede seguir viviendo en el directorio de datos y
@@ -86,8 +102,12 @@ motores van dentro del APK.
 - `src-tauri/src/queue.rs:381` — la carpeta se pasa como `current_dir`.
 
 Android usa **almacenamiento por alcance**: no se puede escribir en rutas
-arbitrarias ni usar `content://` como `current_dir`. Hace falta **SAF/MediaStore**
-para el destino final y un directorio privado para el `.part` y el procesado.
+arbitrarias ni usar `content://` como `current_dir`. Por eso el `.part` y el
+procesado ocurren en el directorio privado de la app y el destino final se
+resuelve con **MediaStore** (ver Fase D): se descarga en
+`Android/data/<paquete>/files/` y, al terminar, el archivo se publica en la
+biblioteca multimedia con `MediaStoreBridge.publish`, que devuelve el
+`content://` de la entrada visible en la galería.
 
 ### 1.3. Scaffold Android (ya existe)
 
@@ -305,17 +325,22 @@ navegador real a 390×844.
 
 ### Fase C — Motores nativos (arm64)
 
-- [ ] CPython para Android (el ejecutable y su `libpython3.x.so`) compilado con el
+- [x] CPython para Android (el ejecutable y su `libpython3.x.so`) compilado con el
       NDK y empaquetado en `jniLibs` con `android:extractNativeLibs="true"` (5.4).
-- [ ] ffmpeg y quickjs como `.so` arm64 (Bionic, no glibc) en `jniLibs`.
-- [ ] `resolve()` con ruta fija a `nativeLibraryDir` en Android (`engine.rs:93`); la
-      ruta la tiene que dar el lado Kotlin (`applicationInfo.nativeLibraryDir`),
-      porque cambia con cada instalación.
-- [ ] La invocación deja de ser un binario: `<python> <zipapp-yt-dlp>` más los
+- [x] ffmpeg y quickjs como `.so` arm64 (Bionic, no glibc) en `jniLibs`.
+- [x] `ffprobe` al lado de ffmpeg (`libffprobe.so`): yt-dlp lo usa para leer
+      duración, códecs y streams al incrustar metadatos o portada. Sin él el
+      postprocesado falla con «Unable to embed using ffprobe & ffmpeg» (5.4).
+- [x] Certificados raíz de TLS (`cacert.pem`) dentro del stdlib y `SSL_CERT_FILE`
+      apuntándolos: sin ellos Python rechaza cualquier HTTPS (5.4).
+- [x] `resolve()` con ruta fija a `nativeLibraryDir` en Android (`engine.rs:93`); la
+      ruta la da el lado Kotlin (`applicationInfo.nativeLibraryDir`), porque cambia
+      con cada instalación.
+- [x] La invocación deja de ser un binario: `<python> <zipapp-yt-dlp>` más los
       mismos argumentos (`ytdlp.rs:456`, `:730`, `:787`).
-- [ ] Caso `android` en el actualizador: descarga del *zipapp* `yt-dlp` con
+- [x] Caso `android` en el actualizador: descarga del *zipapp* `yt-dlp` con
       reemplazo atómico y sin `chmod` (`updater.rs:341`, `:408`).
-- [ ] Ajustes en Android: las filas de «comprobar/actualizar» y los interruptores de
+- [x] Ajustes en Android: las filas de «comprobar/actualizar» y los interruptores de
       descarga automática cuentan que ffmpeg y el runtime JS vienen con la app, y que
       solo yt-dlp se pone al día solo.
 - [ ] App Bundle/`abiFilters`: no servir las tres arquitecturas al mismo teléfono.
@@ -325,10 +350,41 @@ navegador real a 390×844.
 
 ### Fase D — Almacenamiento y salida
 
-- [ ] Directorio privado para `.part`/procesado y destino final por SAF/MediaStore.
-- [ ] `default_download_dir` y selector de carpeta adaptados.
-- [ ] Sustituir "mostrar en carpeta" por abrir/compartir.
-- [ ] Cookies solo por fichero; ocultar detección de navegadores.
+- [x] Directorio privado para `.part`/procesado y destino final por MediaStore.
+      Android solo deja escribir sin permisos en `Android/data/<paquete>/files/`,
+      que el usuario **no ve**, así que ahí se descarga y al terminar el archivo se
+      publica en la biblioteca multimedia (`MediaStoreBridge.publish`), que crea la
+      entrada visible en la galería y borra la copia privada. El `content://`
+      resultante pasa a ser la ruta del trabajo.
+- [x] `default_download_dir` y selector de carpeta adaptados: en Android no se
+      ofrece el selector del sistema (devuelve un `content://` inutilizable como
+      `current_dir`) sino las carpetas propias de la app (`app_folders`).
+- [x] Sustituir "mostrar en carpeta" por abrir. `revealItemInDir` no existe en
+      Android; el botón pasa a **abrir** el archivo (`open_file`), que acepta tanto
+      rutas reales como `content://`.
+- [x] Cookies solo por fichero; ocultar detección de navegadores. El selector de
+      Android devuelve un `content://`, que yt-dlp no acepta como `--cookies`, así
+      que el `cookies.txt` elegido se copia a la carpeta privada y se le pasa la
+      ruta real (`pick_cookies_file`). Falta verificarlo en dispositivo.
+
+**Tres detalles que costaron un intento fallido cada uno:**
+
+- **R8 renombra los métodos que Rust llama por JNI.** `env.call_method(activity,
+  "publishToMediaStore", …)` busca el nombre literal; con la minificación de
+  release los métodos pasaban a llamarse `a`, `b`… y la llamada fallaba con
+  `NoSuchMethodError`, silenciado por el propio código. Se conservan con
+  `-keepclassmembers` en `proguard-rules.pro`.
+- **La firma JNI tiene que coincidir exactamente.** `openDownloaded` devolvía
+  `boolean` pero Rust usaba un puente común que espera `String`; ahora ambos
+  métodos devuelven `String`, y el descriptor es el mismo para los dos.
+- **Abrir no puede hacerse desde el hilo principal.** El comando `open_file` es
+  `async` y el puente corre en `spawn_blocking`: hablar con el hilo principal
+  desde el propio hilo principal se quedaría esperando su respuesta.
+
+**Limitación conocida:** los subtítulos sueltos (`--write-subs` sin incrustar) no se
+publican en la galería (solo el archivo principal tiene entrada). Sus ficheros, y
+los restos de yt-dlp (`.part`, `.webp` de portada), se borran de la carpeta privada
+al terminar la descarga (`queue.rs::cleanup_companions`), así que no se acumulan.
 
 ### Fase E — Notificaciones y ciclo de vida
 
@@ -374,6 +430,19 @@ navegador real a 390×844.
    versión nueva de Downlink. En Ajustes, en Android, sus filas de
    «comprobar/actualizar» y los interruptores de descarga automática deben contar
    eso, no ofrecer una descarga que no va a pasar.
+
+   **Tres detalles que hay que acertar al empaquetar** (los tres costaron un APK
+   que «no funcionaba»):
+
+   - `android:extractNativeLibs="true"`: sin él los `.so` no se escriben en disco
+     y no hay nada que ejecutar (ver 1.1).
+   - `cacert.pem` dentro del stdlib: sin certificados raíz, Python arranca pero
+     rechaza todo HTTPS con «unable to get local issuer certificate» y yt-dlp ni
+     llega a YouTube. Se apunta con `SSL_CERT_FILE`/`REQUESTS_CA_BUNDLE`.
+   - `ffprobe` junto a ffmpeg, como `libffprobe.so`: yt-dlp lo busca sustituyendo
+     `ffmpeg` por `ffprobe` en el nombre que le pasa `--ffmpeg-location`, así que
+     basta con dejar los dos ficheros al lado con esos nombres. Sin `ffprobe`, el
+     postprocesado falla al incrustar metadatos o portada.
 
    **Lo que sí se actualiza solo: `yt-dlp`, porque es Python.** Y no hace falta
    bajar el `targetSdk` ni salirse de Play: la política de *Device and Network
@@ -479,6 +548,17 @@ tamaño**: en depuración la librería lleva los símbolos y el APK ronda los 40
 con `CARGO_PROFILE_DEV_DEBUG=0` en el entorno baja a lo razonable. Una compilación
 de publicación lo deja en su sitio de verdad, pero exige configurar la firma (fase
 F).
+
+Para que el APK **ejecute** los motores hace falta que el instalador los extraiga
+(ver 5.4): `AndroidManifest.xml` lleva `android:extractNativeLibs="true"` y
+`build.gradle.kts` `packaging { jniLibs { useLegacyPackaging = true } }`. Si algún
+día los motores «no aparecen» tras instalar, lo primero que hay que mirar es esto:
+
+```sh
+aapt2 dump xmltree --file AndroidManifest.xml <apk> | grep extractNativeLibs
+# tiene que decir =true
+unzip -l <apk> | grep lib/          # y aquí tienen que salir los lib*.so
+```
 
 Para comprobar el código `#[cfg(target_os = "android")]`, que en Linux no se compila
 —y por tanto no lo ve ni `cargo check` ni Clippy—, sirve el mismo target con el

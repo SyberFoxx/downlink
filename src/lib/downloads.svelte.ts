@@ -5,6 +5,7 @@ import {
   getQueue,
   onQueueUpdated,
   onSharedLink,
+  openFile,
   pauseDownload,
   probeUrl,
   reorderQueue,
@@ -16,7 +17,7 @@ import {
 import { defaultOptions } from "./options";
 import { settings } from "./settings.svelte";
 import { toast } from "./toast.svelte";
-import { extractError, isAndroid } from "./utils";
+import { extractError, isAndroid, revealOrOpen } from "./utils";
 import type { DownloadOptions, ProbeInfo, QueueJob } from "./types";
 
 /**
@@ -352,7 +353,7 @@ export async function reorder(ids: number[]): Promise<void> {
 export async function reveal(job: QueueJob): Promise<void> {
   if (!job.filePath) return;
   try {
-    await revealItemInDir(job.filePath);
+    await revealOrOpen(job.filePath, revealItemInDir, openFile);
   } catch (e) {
     downloads.errorMessage = extractError(e);
   }

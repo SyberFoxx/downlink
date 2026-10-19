@@ -1,6 +1,12 @@
 <script lang="ts">
   import type { JobStatus, QueueJob } from "$lib/types";
-  import { formatBytes, formatEta, formatSpeed } from "$lib/utils";
+  import {
+    displayPath,
+    formatBytes,
+    formatEta,
+    formatSpeed,
+    isAndroid,
+  } from "$lib/utils";
   import { summarizeOptions } from "$lib/options";
 
   interface Props {
@@ -189,7 +195,7 @@
         >
       {:else if status === "done" && job.filePath}
         <p class="copyable mt-0.5 truncate font-mono text-xs text-ink-faint">
-          {job.filePath}
+          {displayPath(job.filePath)}
         </p>
       {:else if status === "error"}
         <p
@@ -237,8 +243,8 @@
       {#if status === "done" && job.filePath}
         <button
           class="rounded-md p-1 text-ink-muted transition-colors tap tap-center hover:bg-elevated hover:text-ink"
-          title="Mostrar en la carpeta"
-          aria-label="Mostrar el archivo en la carpeta"
+          title={isAndroid() ? "Abrir el archivo" : "Mostrar en la carpeta"}
+          aria-label={isAndroid() ? "Abrir el archivo" : "Mostrar el archivo en la carpeta"}
           onclick={() => onReveal(job)}
         >
           <svg class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">

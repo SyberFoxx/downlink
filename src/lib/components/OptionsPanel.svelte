@@ -90,6 +90,24 @@
 
   let heights = $derived(availableHeightsFor(info.heights));
   let resolution1080 = $derived(closestHeight(heights, 1080));
+  /**
+   * Valor del desplegable de calidad.
+   *
+   * El `<select>` se enlaza a una cadena y no a `videoHeight` directamente porque
+   * un `<option value={null}>` llega al navegador como la cadena "null": al elegir
+   * «Máxima calidad» (que pone `videoHeight` a `null`) ningún `<option>` coincidía
+   * y el desplegable se quedaba en blanco, como si no hubiera nada seleccionado.
+   */
+  const BEST = "best" as const;
+  let heightChoice = $derived(
+    options.mode === "video" && options.videoHeight == null
+      ? BEST
+      : String(options.videoHeight ?? BEST),
+  );
+  function chooseHeight(value: string) {
+    options.videoHeight = value === BEST ? null : Number(value);
+    activePreset = null;
+  }
   let showQuality = $derived(qualityApplies(options));
   let reencodes = $derived(
     options.mode === "video" && (options.volumeDb !== 0 || options.normalizeAudio),
@@ -181,12 +199,13 @@
         >
         <select
           aria-label="Calidad de video"
-          bind:value={options.videoHeight}
+          value={heightChoice}
+          onchange={(e) => chooseHeight(e.currentTarget.value)}
           class="tap w-full rounded-lg border border-line bg-canvas/60 px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
-          <option value={null}>Mejor disponible</option>
+          <option value={BEST}>Mejor disponible</option>
           {#each heights as height (height)}
-            <option value={height}>{height}p</option>
+            <option value={String(height)}>{height}p</option>
           {/each}
         </select>
       </div>

@@ -23,6 +23,7 @@
     missingLabel = null,
     autoLabel,
     hint = null,
+    bundled = false,
     autoChecked = $bindable(true),
     check,
     update,
@@ -39,6 +40,11 @@
     autoLabel: string;
     /** Nota al pie para la casilla (opcional). */
     hint?: string | null;
+    /**
+     * El motor viene incluido con la aplicación (Android): no se descarga ni se
+     * actualiza, así que se ocultan los botones y la casilla de auto-descarga.
+     */
+    bundled?: boolean;
     autoChecked?: boolean;
     check: () => Promise<UpdateCheck>;
     update: () => Promise<UpdateCheck>;
@@ -130,27 +136,29 @@
       {/if}
     </div>
     <div class="flex shrink-0 gap-2">
-      <button
-        class="tap rounded-md border border-line px-3 py-1.5 text-xs text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
-        disabled={checking || updating}
-        onclick={refresh}
-      >
-        {checking ? "Buscando…" : "Buscar"}
-      </button>
-      {#if info?.updateAvailable}
+      {#if !bundled}
         <button
-          class="tap rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:opacity-50"
-          disabled={updating}
-          onclick={runUpdate}
+          class="tap rounded-md border border-line px-3 py-1.5 text-xs text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
+          disabled={checking || updating}
+          onclick={refresh}
         >
-          {#if updating}
-            Actualizando…
-          {:else if info.current === null}
-            Descargar
-          {:else}
-            Actualizar
-          {/if}
+          {checking ? "Buscando…" : "Buscar"}
         </button>
+        {#if info?.updateAvailable}
+          <button
+            class="tap rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink transition-colors hover:bg-accent-hover disabled:opacity-50"
+            disabled={updating}
+            onclick={runUpdate}
+          >
+            {#if updating}
+              Actualizando…
+            {:else if info.current === null}
+              Descargar
+            {:else}
+              Actualizar
+            {/if}
+          </button>
+        {/if}
       {/if}
     </div>
   </div>
@@ -164,14 +172,16 @@
     </div>
   {/if}
 
-  <label class="tap mt-3 flex items-center gap-2">
-    <input
-      type="checkbox"
-      bind:checked={autoChecked}
-      class="size-3.5 max-md:size-5 accent-accent"
-    />
-    <span class="text-xs text-ink-soft">{autoLabel}</span>
-  </label>
+  {#if !bundled}
+    <label class="tap mt-3 flex items-center gap-2">
+      <input
+        type="checkbox"
+        bind:checked={autoChecked}
+        class="size-3.5 max-md:size-5 accent-accent"
+      />
+      <span class="text-xs text-ink-soft">{autoLabel}</span>
+    </label>
+  {/if}
 
   {#if hint}
     <p class="mt-1.5 text-[11px] text-ink-faint">{hint}</p>

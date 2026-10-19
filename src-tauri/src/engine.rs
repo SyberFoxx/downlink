@@ -6,8 +6,11 @@
 //!    forzar una ruta concreta (útil en desarrollo y tests).
 //! 2. **Copia gestionada** por la app en `<app_data>/bin`: es la que la app
 //!    puede descargar y mantener actualizada sin tocar el sistema.
-//! 3. **Sidecar** incluido junto al ejecutable (mecanismo `externalBin` de Tauri).
-//! 4. **PATH** del sistema.
+//! 3. **Motor incluido en el APK** ([`bundled`], solo Android): los intérpretes y
+//!    herramientas viajan dentro de la aplicación como `lib*.so`. En el escritorio
+//!    no hay nada que buscar.
+//! 4. **Sidecar** incluido junto al ejecutable (mecanismo `externalBin` de Tauri).
+//! 5. **PATH** del sistema.
 //!
 //! `yt-dlp` nunca puede quedar sin resolver: si no se encuentra, se devuelve el
 //! nombre pelado para que falle con un mensaje claro al ejecutarlo.
@@ -21,6 +24,23 @@ use tokio::process::Command;
 
 /// Carpeta de binarios gestionados por la app. Se fija una sola vez al arrancar.
 static MANAGED_BIN_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Carpeta de datos de la app. Se fija una sola vez al arrancar.
+static APP_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Carpeta de bibliotecas nativas (`nativeLibraryDir`) que manda `MainActivity`.
+/// Solo tiene sentido en Android: es donde el instalador extrae los motores.
+#[cfg(target_os = "android")]
+static JNI_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+/// Nombre de los motores que viajan dentro del APK (ficheros `lib*.so` en la
+/// carpeta de bibliotecas nativas).
+pub const BUNDLED_PYTHON: &str = "python";
+/// El stdlib de Python va comprimido y solo se descomprime en Android.
+#[cfg(target_os = "android")]
+pub const BUNDLED_PYTHON_STDLIB: &str = "python-stdlib";
+pub const BUNDLED_QUICKJS: &str = "quickjs";
+pub const BUNDLED_YTDLP: &str = "yt-dlp";
 
 /// De dónde procede un ejecutable (para mostrarlo en Ajustes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,17 +67,186 @@ impl Source {
     }
 }
 
-/// Fija la carpeta de binarios gestionados a partir del directorio de datos de
-/// la app. Idempotente: llamarlo más de una vez no tiene efecto.
+/// Fija las carpetas de trabajo a partir del directorio de datos de la app y
+/// deja listo lo que los motores necesitan para funcionar.
+///
+/// Idempotente: llamarlo más de una vez no tiene efecto.
 pub fn init(app: &AppHandle) {
     if let Ok(dir) = app.path().app_data_dir() {
+        let _ = APP_DATA_DIR.set(dir.clone());
         let _ = MANAGED_BIN_DIR.set(dir.join("bin"));
+        // Los hijos (yt-dlp sobre todo) escriben temporales: fuera de sus
+        // carpetas Android no deja.
+        let _ = std::fs::create_dir_all(dir.join("tmp"));
     }
+    prepare_python();
+}
+
+/// Carpeta de datos de la app, si ya se inicializó.
+fn app_data_dir() -> Option<&'static Path> {
+    APP_DATA_DIR.get().map(PathBuf::as_path)
 }
 
 /// Carpeta de binarios gestionados, si ya se inicializó.
 pub fn managed_bin_dir() -> Option<&'static Path> {
     MANAGED_BIN_DIR.get().map(PathBuf::as_path)
+}
+
+/// `PYTHONHOME` del intérprete que viaja en el APK: el stdlib descomprimido.
+pub fn python_home() -> Option<PathBuf> {
+    app_data_dir().map(|dir| dir.join("python"))
+}
+
+/// Directorio de bibliotecas nativas del APK (`nativeLibraryDir`).
+///
+/// Es donde Android extrae los `lib*.so` y, desde Android 10, el único sitio de
+/// la aplicación desde el que se puede **ejecutar** algo propio: en la carpeta de
+/// datos está prohibido.
+///
+/// La fuente principal es `MainActivity`, que la manda por JNI
+/// ([`set_bundled_lib_dir`]) usando `applicationInfo.nativeLibraryDir`; Android
+/// recalcula esa ruta en cada instalación, así que preguntársela a él es lo único
+/// fiable. Si eso no ha llegado todavía, se deduce con [`dladdr`] sobre esta misma
+/// biblioteca, que suele bastar como respaldo.
+#[cfg(target_os = "android")]
+fn bundled_lib_dir() -> Option<&'static Path> {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        if let Some(dir) = JNI_DIR.get() {
+            return dir.clone();
+        }
+        detect_bundled_lib_dir().unwrap_or_default()
+    });
+    let dir = DIR.get().map(PathBuf::as_path)?;
+    (!dir.as_os_str().is_empty()).then_some(dir)
+}
+
+/// Registra la carpeta de bibliotecas nativas que manda `MainActivity`.
+///
+/// Se llama una sola vez, en cuanto arranca la actividad: la primera descarga no
+/// puede llegar antes.
+#[cfg(target_os = "android")]
+pub fn set_bundled_lib_dir(dir: &str) {
+    if dir.is_empty() {
+        return;
+    }
+    let _ = JNI_DIR.set(PathBuf::from(dir));
+}
+
+/// Deduce la carpeta de bibliotecas nativas a partir de la biblioteca ya cargada.
+#[cfg(target_os = "android")]
+fn detect_bundled_lib_dir() -> Option<PathBuf> {
+    use std::ffi::CStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // dladdr sobre esta propia función: el nombre que devuelve es el del fichero
+    // `libdownlink_lib.so`, y de ahí sale su carpeta.
+    let mut info: libc::Dl_info = unsafe { std::mem::zeroed() };
+    let addr = detect_bundled_lib_dir as *const libc::c_void;
+    if unsafe { libc::dladdr(addr, &mut info) } != 0 && !info.dli_fname.is_null() {
+        let file = unsafe { CStr::from_ptr(info.dli_fname) };
+        let path = Path::new(OsStr::from_bytes(file.to_bytes()));
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            return Some(parent.to_path_buf());
+        }
+    }
+
+    // Respaldo: la ruta completa aparece en `/proc/self/maps`.
+    let content = std::fs::read_to_string("/proc/self/maps").ok()?;
+    for line in content.lines() {
+        let Some(dir) = line.rsplit_once(" /").map(|(_, rest)| rest) else {
+            continue;
+        };
+        let Some(file) = dir.rsplit('/').next() else {
+            continue;
+        };
+        if file.starts_with("libdownlink_lib") && file.ends_with(".so") {
+            return Path::new(dir).parent().map(Path::to_path_buf);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "android"))]
+fn bundled_lib_dir() -> Option<&'static Path> {
+    None
+}
+
+/// Ruta de un motor que viaja dentro del APK (`lib<name>.so`), si esta versión lo
+/// incluye. En el escritorio siempre es `None`.
+pub fn bundled(name: &str) -> Option<PathBuf> {
+    let path = bundled_lib_dir()?.join(format!("lib{name}.so"));
+    path.is_file().then_some(path)
+}
+
+/// Descomprime el intérprete de Python que viaja en el APK.
+///
+/// El stdlib no puede quedarse dentro de un `.so`: las extensiones (`_ssl.so`,
+/// `_socket.so`…) tienen que ser ficheros de verdad para que Python pueda
+/// cargarlas. Se hace una sola vez (la primera vez que arranca la app tras
+/// instalarla o actualizarla) y se marca con una huella del paquete para no
+/// repetirlo. Si falla, no se avisa aquí: el motor dará un error al usarlo.
+#[cfg(target_os = "android")]
+fn prepare_python() {
+    use sha2::{Digest, Sha256};
+
+    let (Some(home), Some(package)) = (python_home(), bundled(BUNDLED_PYTHON_STDLIB)) else {
+        return;
+    };
+    let Ok(mut file) = std::fs::File::open(&package) else {
+        return;
+    };
+    let mut hasher = Sha256::new();
+    if std::io::copy(&mut file, &mut hasher).is_err() {
+        return;
+    }
+    let fingerprint = format!("{:x}", hasher.finalize());
+
+    let marker = home.join(".huella");
+    if std::fs::read_to_string(&marker).ok().as_deref() == Some(fingerprint.as_str()) {
+        return;
+    }
+    // Se tira lo anterior: si el APK nuevo trae otra versión de Python, los
+    // módulos compilados tampoco valen.
+    let lib = home.join("lib");
+    let _ = std::fs::remove_dir_all(&lib);
+    if extract_zip(&package, &lib).is_err() {
+        return;
+    }
+    let _ = std::fs::write(&marker, &fingerprint);
+}
+
+#[cfg(not(target_os = "android"))]
+fn prepare_python() {}
+
+/// Descomprime un `.zip` dentro de `target`, sin dejar que una entrada se salga
+/// de la carpeta ([`zip::read::ZipFile::enclosed_name`]).
+#[cfg(target_os = "android")]
+fn extract_zip(package: &Path, target: &Path) -> std::io::Result<()> {
+    let file = std::fs::File::open(package)?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    for index in 0..archive.len() {
+        let mut entry = archive
+            .by_index(index)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let Some(relative) = entry.enclosed_name() else {
+            continue;
+        };
+        let destination = target.join(relative);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&destination)?;
+            continue;
+        }
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut out = std::fs::File::create(&destination)?;
+        std::io::copy(&mut entry, &mut out)?;
+    }
+    Ok(())
 }
 
 /// Nombre del ejecutable con la extensión propia de la plataforma.
@@ -92,16 +281,66 @@ pub fn which(bin: &str) -> Option<PathBuf> {
 }
 
 /// Crea un `Command` para un binario externo (yt-dlp, ffmpeg, node…) con el
-/// entorno de la AppImage saneado ([`sanitize_env`]) y sin ventana de consola en
-/// Windows ([`hide_console`]).
+/// entorno de la AppImage saneado ([`sanitize_env`]), el de Android completado
+/// ([`android_env`]) y sin ventana de consola en Windows ([`hide_console`]).
 ///
 /// Es el **único** punto por el que deben lanzarse procesos externos.
 pub fn command(bin: impl AsRef<OsStr>) -> Command {
     let mut cmd = Command::new(bin);
     sanitize_env(&mut cmd);
+    android_env(&mut cmd);
     hide_console(&mut cmd);
     cmd
 }
+
+/// Completa el entorno que los motores esperan y que en Android no existe.
+///
+/// En Android `HOME` no está definido y el `/tmp` del sistema no es escribible,
+/// y yt-dlp los necesita: guarda su caché en `HOME` (de ahí salen los componentes
+/// que resuelven los retos de YouTube) y deja ficheros temporales al descargar.
+/// Se le da la carpeta de datos de la app, que es donde puede escribir.
+///
+/// Además apunta `SSL_CERT_FILE` a los certificados raíz que viajan con el
+/// intérprete. Sin ellos Python arranca pero rechaza cualquier HTTPS
+/// (`unable to get local issuer certificate`) y yt-dlp no llega ni a YouTube:
+/// el `openssldir` de OpenSSL no se copia al APK, así que el fichero va dentro
+/// del stdlib y hay que señalarlo a mano.
+#[cfg(target_os = "android")]
+fn android_env(cmd: &mut Command) {
+    if let Some(dir) = app_data_dir() {
+        cmd.env("HOME", dir);
+        cmd.env("TMPDIR", dir.join("tmp"));
+    }
+    if let Some(ca) = ca_bundle() {
+        cmd.env("SSL_CERT_FILE", &ca);
+        // `requests`/`certifi` y otras bibliotecas miran también `REQUESTS_CA_BUNDLE`.
+        cmd.env("REQUESTS_CA_BUNDLE", &ca);
+    }
+}
+
+/// Ruta de los certificados raíz de TLS que acompañan al intérprete del APK.
+///
+/// Es el `cacert.pem` que `scripts/android-engine.sh` mete en el stdlib (ver
+/// [`prepare_python`], que lo descomprime en `python_home`). Se busca en las
+/// versiones de `lib/python3.x` en vez de fijar la versión: si algún día se
+/// sube CPython, esto sigue encontrándolo.
+#[cfg(target_os = "android")]
+pub fn ca_bundle() -> Option<PathBuf> {
+    let lib = python_home()?.join("lib");
+    for entry in std::fs::read_dir(&lib).ok()?.flatten() {
+        if !entry.file_name().to_string_lossy().starts_with("python3") {
+            continue;
+        }
+        let path = entry.path().join("cacert.pem");
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "android"))]
+fn android_env(_cmd: &mut Command) {}
 
 /// Evita que Windows abra una ventana de consola al lanzar un ejecutable de
 /// consola (`yt-dlp.exe`, `ffmpeg.exe`, `qjs.exe`…) desde la app, que es
@@ -179,16 +418,46 @@ pub fn resolve(name: &str, env_var: &str) -> Option<(PathBuf, Source)> {
     {
         return Some((path, Source::Managed));
     }
+    if let Some(path) = bundled(name) {
+        return Some((path, Source::Sidecar));
+    }
     if let Some(path) = sidecar_path(name) {
         return Some((path, Source::Sidecar));
     }
     which(name).map(|path| (path, Source::System))
 }
 
-/// Resuelve `yt-dlp` con su origen. Nunca es `None`: si no aparece, se devuelve
-/// el nombre pelado para que el error al ejecutarlo sea explicativo.
-pub fn ytdlp() -> (PathBuf, Source) {
-    resolve("yt-dlp", "DOWNLINK_YTDLP").unwrap_or((PathBuf::from("yt-dlp"), Source::System))
+/// Resuelve `yt-dlp` con su origen (puede no estar instalado).
+pub fn ytdlp() -> Option<(PathBuf, Source)> {
+    resolve("yt-dlp", "DOWNLINK_YTDLP")
+}
+
+/// Proceso de `yt-dlp` listo para añadirle los argumentos.
+///
+/// En el escritorio es su propio binario. En Android no hay binario nativo: el
+/// *zipapp* lo lee el intérprete de Python que viaja en el APK, y hay que pasarle
+/// dónde está el stdlib (`PYTHONHOME`). Manda la copia gestionada —la que la app
+/// mantiene al día— y el zipapp del APK sirve para funcionar nada más instalar.
+pub fn ytdlp_command() -> Command {
+    let app = managed_path("yt-dlp")
+        .filter(|path| path.is_file())
+        .or_else(|| bundled(BUNDLED_YTDLP))
+        .unwrap_or_else(|| PathBuf::from("yt-dlp"));
+    ytdlp_command_for(&app)
+}
+
+/// Proceso de `yt-dlp` para un fichero concreto (el gestionado, el del APK o uno
+/// recién descargado que todavía no está en su sitio).
+pub fn ytdlp_command_for(app: &Path) -> Command {
+    let Some(python) = bundled(BUNDLED_PYTHON) else {
+        return command(app);
+    };
+    let mut cmd = command(python);
+    if let Some(home) = python_home() {
+        cmd.env("PYTHONHOME", home);
+    }
+    cmd.arg(app);
+    cmd
 }
 
 /// Resuelve `ffmpeg` con su origen (puede no estar instalado).
@@ -198,12 +467,12 @@ pub fn ffmpeg() -> Option<(PathBuf, Source)> {
 
 /// Error al no poder lanzar el motor.
 ///
-/// En Android los motores van dentro del APK y todavía no hay ninguno (ver
-/// `docs/android-v1.md`, fase C), así que conviene decir eso en vez de soltar un
-/// error del sistema, que parecería una avería.
+/// En Android los motores van dentro del APK, así que un fallo del sistema no
+/// explica gran cosa: casi siempre será que a esta compilación le faltan los
+/// binarios (`scripts/android-engine.sh`).
 pub fn spawn_error(error: &std::io::Error) -> String {
     if cfg!(target_os = "android") {
-        "Esta versión para Android todavía no incluye el motor de descarga.".to_string()
+        "No se pudo arrancar el motor de descarga de esta versión para Android.".to_string()
     } else {
         format!("No se pudo ejecutar yt-dlp: {error}")
     }
@@ -276,17 +545,32 @@ mod tests {
         );
     }
 
-    /// `yt-dlp` siempre resuelve a algo (ruta del PATH o el nombre pelado).
+    /// En el escritorio, `yt-dlp` se lanza tal cual; en Android, lo lee el
+    /// intérprete de Python que viaja en el APK.
     #[test]
-    fn ytdlp_siempre_resuelve_algo() {
-        let (path, _source) = ytdlp();
-        let name = path
+    fn ytdlp_se_lanza_con_lo_que_haya() {
+        let command = ytdlp_command();
+        let program = command.as_std().get_program().to_string_lossy().to_string();
+        let name = Path::new(&program)
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        assert!(
-            name == "yt-dlp" || name == "yt-dlp.exe",
-            "nombre inesperado: {name}"
-        );
+        if cfg!(target_os = "android") {
+            assert_eq!(name, "libpython.so", "programa inesperado: {program}");
+        } else {
+            assert!(
+                name == "yt-dlp" || name == "yt-dlp.exe",
+                "programa inesperado: {program}"
+            );
+        }
+    }
+
+    /// Fuera de Android no hay motores incluidos en la aplicación.
+    #[test]
+    #[cfg(not(target_os = "android"))]
+    fn en_el_escritorio_no_hay_motores_incluidos() {
+        assert!(bundled_lib_dir().is_none());
+        assert!(bundled(BUNDLED_YTDLP).is_none());
+        assert!(bundled(BUNDLED_PYTHON).is_none());
     }
 }

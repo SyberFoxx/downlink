@@ -4,6 +4,7 @@
   import { initTheme, refreshPalette, theme } from "$lib/theme.svelte";
   import { settings } from "$lib/settings.svelte";
   import { autoThemeId, themeById, themeFromPalette, type Theme } from "$lib/themes";
+  import { isAndroid } from "$lib/utils";
 
   onMount(() => {
     void initTheme();
@@ -56,7 +57,16 @@
 
   async function chooseWallpaper() {
     themeError = null;
-    const path = await pickWallpaper();
+    let path: string | null = null;
+    try {
+      path = await pickWallpaper();
+    } catch (e) {
+      // En Android el selector lo abre el lado nativo; si falla ahí (por ejemplo,
+      // sin ninguna aplicación de galería), el error llega hasta aquí.
+      themeError =
+        typeof e === "string" ? e : "No se pudo abrir el selector de imágenes.";
+      return;
+    }
     if (!path) return;
     try {
       await theme.setWallpaper(path);
@@ -264,8 +274,13 @@
   <section class="mb-8">
     <h2 class="mb-1 text-sm font-medium text-ink-strong">Imagen de fondo</h2>
     <p class="mb-4 text-xs text-ink-muted">
-      Una imagen tuya (wallpaper) por detrás de los paneles. Cuanto más
-      translúcido el tema, más se nota.
+      {#if isAndroid()}
+        Una imagen de tu galería por detrás de los paneles. Se guarda una copia
+        dentro de la app, así que puedes borrar la original sin perder el fondo.
+      {:else}
+        Una imagen tuya (wallpaper) por detrás de los paneles. Cuanto más
+        translúcido el tema, más se nota.
+      {/if}
     </p>
 
     {#if theme.wallpaperUrl}
@@ -347,51 +362,53 @@
   </section>
 
   <!-- Escritorio -->
-  <section class="mb-8">
-    <h2 class="mb-1 text-sm font-medium text-ink-strong">Escritorio</h2>
-    <p class="mb-4 text-xs text-ink-muted">
-      Si usas pywal o wallust (típico en Hyprland y otros escritorios), Downlink
-      puede adoptar la paleta que generan a partir de tu fondo.
-    </p>
+  {#if !isAndroid()}
+    <section class="mb-8">
+      <h2 class="mb-1 text-sm font-medium text-ink-strong">Escritorio</h2>
+      <p class="mb-4 text-xs text-ink-muted">
+        Si usas pywal o wallust (típico en Hyprland y otros escritorios), Downlink
+        puede adoptar la paleta que generan a partir de tu fondo.
+      </p>
 
-    <div class="rounded-lg border border-line bg-surface/30 px-3.5 py-3 text-sm">
-      {#if theme.palette}
-        <div class="flex items-center justify-between">
-          <span class="text-ink-muted">Paleta detectada</span>
-          <span class="font-mono text-xs text-ok">{theme.palette.source}</span>
-        </div>
-        <div class="mt-2 flex gap-1">
-          {#each theme.palette.colors.slice(0, 8) as color, i (i)}
-            <span
-              class="h-4 flex-1 rounded-sm"
-              style="background:{color}"
-            ></span>
-          {/each}
-        </div>
-      {:else}
-        <div class="flex items-center justify-between">
-          <span class="text-ink-muted">Paleta detectada</span>
-          <span class="text-xs text-ink-faint">ninguna</span>
-        </div>
-      {/if}
-    </div>
+      <div class="rounded-lg border border-line bg-surface/30 px-3.5 py-3 text-sm">
+        {#if theme.palette}
+          <div class="flex items-center justify-between">
+            <span class="text-ink-muted">Paleta detectada</span>
+            <span class="font-mono text-xs text-ok">{theme.palette.source}</span>
+          </div>
+          <div class="mt-2 flex gap-1">
+            {#each theme.palette.colors.slice(0, 8) as color, i (i)}
+              <span
+                class="h-4 flex-1 rounded-sm"
+                style="background:{color}"
+              ></span>
+            {/each}
+          </div>
+        {:else}
+          <div class="flex items-center justify-between">
+            <span class="text-ink-muted">Paleta detectada</span>
+            <span class="text-xs text-ink-faint">ninguna</span>
+          </div>
+        {/if}
+      </div>
 
-    <div class="mt-3 flex items-center gap-2">
-      <button
-        class="tap rounded-md border border-line px-3 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
-        disabled={adopting || !theme.palette}
-        onclick={adoptPalette}
-      >
-        Adoptar paleta
-      </button>
-      <button
-        class="tap rounded-md border border-line px-3 py-1.5 text-sm text-ink-muted transition-colors hover:bg-surface"
-        onclick={() => refreshPalette()}
-      >
-        Volver a buscar
-      </button>
-    </div>
-  </section>
+      <div class="mt-3 flex items-center gap-2">
+        <button
+          class="tap rounded-md border border-line px-3 py-1.5 text-sm text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
+          disabled={adopting || !theme.palette}
+          onclick={adoptPalette}
+        >
+          Adoptar paleta
+        </button>
+        <button
+          class="tap rounded-md border border-line px-3 py-1.5 text-sm text-ink-muted transition-colors hover:bg-surface"
+          onclick={() => refreshPalette()}
+        >
+          Volver a buscar
+        </button>
+      </div>
+    </section>
+  {/if}
 
   <!-- Restablecer -->
   <div class="flex items-center gap-3">

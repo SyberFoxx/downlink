@@ -46,7 +46,6 @@ impl JobStatus {
         matches!(self, Self::Done | Self::Error | Self::Cancelled)
     }
 
-    /// ¿Está ejecutándose (descargando o postprocesando)?
     pub fn is_active(self) -> bool {
         matches!(self, Self::Downloading | Self::Processing)
     }
@@ -221,10 +220,77 @@ fn missing_output(path: &str) -> Option<String> {
     if std::path::Path::new(path).is_file() {
         return None;
     }
+    // Un `content://` de `MediaStore` no es una ruta del sistema: existe, pero
+    // `is_file()` no puede verlo. Se da por bueno sin más comprobación.
+    if path.starts_with("content://") {
+        return None;
+    }
     Some(format!(
         "La descarga terminó, pero el archivo no está en «{path}». \
          Comprueba la carpeta de descargas y vuelve a intentarlo."
     ))
+}
+
+/// Publica el archivo en la galería (solo Android) y devuelve su `content://`.
+///
+/// En el escritorio no hay nada que hacer: el archivo ya está en una carpeta que
+/// el usuario ve. En Android la descarga vive en `Android/data/<paquete>/files/`,
+/// que está oculta, así que se copia a `MediaStore` y se pasa a usar el URI.
+fn publish_if_android(path: Option<String>) -> Option<String> {
+    let path = path?;
+    #[cfg(target_os = "android")]
+    {
+        if let Some(uri) = crate::media_store::publish(&path) {
+            return Some(uri);
+        }
+    }
+    Some(path)
+}
+
+/// Borra los acompañantes que yt-dlp deja junto a una descarga ya publicada.
+///
+/// Al publicar en la galería solo se mueve el archivo principal: los subtítulos
+/// sueltos (`.srt`), las miniaturas que no se pudieron incrustar (`.webp`,
+/// `.jpg`) y los fragmentos (`.part`, `.ytdl`) se quedaban en la carpeta privada
+/// para siempre, engordándola con cada descarga. Aquí se limpian una vez que el
+/// archivo bueno ya está en la galería. Solo se usa en Android: en el escritorio
+/// el usuario ve y gestiona sus propios archivos.
+#[cfg(target_os = "android")]
+fn cleanup_companions(main_path: &str) {
+    let main = std::path::Path::new(main_path);
+    let (Some(dir), Some(stem)) = (main.parent(), main.file_name()) else {
+        return;
+    };
+    let stem = stem.to_string_lossy();
+    // El nombre completo del principal; se compara por prefijo para no borrar
+    // archivos de otras descargas que compartan el mismo título.
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name == *stem {
+            continue;
+        }
+        // Solo acompañantes del mismo prefijo con extensión conocida.
+        let Some(rest) = name.strip_prefix(stem.as_ref()) else {
+            continue;
+        };
+        let rest = rest.trim_start_matches('.');
+        let is_companion = rest == "part"
+            || rest == "ytdl"
+            || rest.ends_with(".part")
+            || rest.ends_with(".ytdl")
+            || rest.ends_with(".srt")
+            || rest.ends_with(".vtt")
+            || rest.ends_with(".ass")
+            || rest.ends_with(".webp")
+            || rest.ends_with(".jpg")
+            || rest.ends_with(".png");
+        if is_companion {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
 }
 
 impl Queue {
@@ -560,6 +626,36 @@ impl Queue {
             None => false,
         };
         drop(child);
+
+        // 1.5) En Android, pasa el archivo a la galería y quédate con su URI.
+        //
+        // La descarga nace en `Android/data/<paquete>/files/`, que el usuario no
+        // ve. Publicarla en `MediaStore` hace que aparezca en la galería, y a
+        // partir de ahí es el `content://` lo que se guarda como ruta: es lo que
+        // sabe abrir el sistema. Si la publicación falla, se conserva la ruta
+        // real y la descarga sigue siendo válida.
+        //
+        // Se hace fuera del lock porque copiar un vídeo es lento (y el lock lo
+        // comparten la cola y la interfaz).
+        let final_path = if success
+            && !matches!(
+                previous,
+                Some(JobStatus::Paused) | Some(JobStatus::Cancelled)
+            )
+        {
+            // En Android, tras publicar, se limpian los acompañantes (subtítulos
+            // sueltos, miniaturas, fragmentos) que si no se acumulan en la carpeta
+            // privada. En el escritorio no se toca nada: ahí el usuario ve y
+            // gestiona sus archivos.
+            let published = publish_if_android(final_path.clone());
+            #[cfg(target_os = "android")]
+            if let Some(original) = final_path.as_deref() {
+                cleanup_companions(original);
+            }
+            published
+        } else {
+            final_path
+        };
 
         // 2) Fija el estado final (salvo si un comando ya lo dejó terminal).
         let mut completed: Option<HistoryEntry> = None;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import {
+    appFolders,
     checkFfmpegUpdate,
     checkJsRuntimeUpdate,
     checkYtdlpUpdate,
@@ -21,7 +22,20 @@
   import { extractError, isAndroid } from "$lib/utils";
   import type { BrowserInfo, CookiesMode, EngineInfo, ShareAction } from "$lib/types";
 
-  const TEST_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+  /**
+   * Prueba que exige cookies: YouTube responde «Sign in to confirm you're not a
+   * bot» a las IP que considera sospechosas, así que este botón solo sirve para
+   * comprobar que las cookies están bien puestas.
+   */
+  const TEST_URL_YOUTUBE = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+  /**
+   * Prueba que **no** necesita cookies: un vídeo libre de Wikimedia Commons.
+   * Sirve para saber si el motor funciona cuando el problema es solo YouTube;
+   * si esta falla, el fallo está en la conexión o en los motores, no en las
+   * cookies.
+   */
+  const TEST_URL_NO_COOKIES =
+    "https://commons.wikimedia.org/wiki/File:Big_Buck_Bunny_medium.ogv";
 
   let browsers = $state<BrowserInfo[]>([]);
   let engine = $state<EngineInfo | null>(null);
@@ -31,10 +45,26 @@
 
   /** Carpeta de descargas del sistema (se muestra como referencia). */
   let systemDir = $state<string | null>(null);
+  /** Carpetas propias de la app (Android), donde sí se puede escribir. */
+  let androidFolders = $state<string[]>([]);
+
+  /**
+   * Nombre corto y legible de una carpeta propia de la app. La ruta completa es
+   * larguísima (`/storage/emulated/0/Android/data/com.ramses.downlink/files/…`),
+   * así que se muestra solo la parte que el usuario reconoce.
+   */
+  function shortFolder(folder: string): string {
+    const last = folder.split("/").filter(Boolean).pop() ?? folder;
+    return last === "files" ? "General" : last;
+  }
   /** `true`/`false` si el sistema confirma; `null` si aún no se sabe. */
   let trayOk = $state<boolean | null>(null);
 
-  let testing = $state(false);
+  /**
+   * Qué prueba está en marcha, o `null`. Se usa para que cada botón muestre
+   * «Probando…» solo el suyo.
+   */
+  let testing = $state<"youtube" | "no-cookies" | null>(null);
   let testResult = $state<{ ok: boolean; message: string } | null>(null);
 
   const modes: { id: CookiesMode; label: string; description: string }[] = [
@@ -51,9 +81,29 @@
     {
       id: "file",
       label: "Archivo cookies.txt",
-      description: "Si usas un navegador portátil o quieres control manual",
+      description: isAndroid()
+        ? "Recomendado: expórtalo en el ordenador y pásalo al teléfono"
+        : "Si usas un navegador portátil o quieres control manual",
     },
   ];
+
+  /// Modos que tienen sentido donde corre la app. En Android «desde el navegador»
+  /// es imposible y además engañoso, así que no se muestra:
+  ///
+  /// - Cada app vive en su propia jaula (`/data/data/<paquete>`) y las cookies de
+  ///   Chrome, Brave o Samsung son **suyas**, no nuestras: no se pueden leer. Es
+  ///   el mismo aislamiento que impide ejecutar binarios fuera de
+  ///   `nativeLibraryDir`.
+  /// - Aunque se pudieran copiar, Android las cifra con una clave del sistema:
+  ///   harían falta root o ser el propio navegador.
+  /// - `--cookies-from-browser` busca ficheros de perfil locales que en Android no
+  ///   existen.
+  ///
+  /// La única vía real es pasar un `cookies.txt`, así que ahí esa pasa a ser la
+  /// opción recomendada.
+  const availableModes = $derived(
+    isAndroid() ? modes.filter((mode) => mode.id !== "browser") : modes,
+  );
 
   const shareModes: { id: ShareAction; label: string; description: string }[] = [
     {
@@ -71,20 +121,26 @@
   ];
 
   onMount(async () => {
-    // Carga tolerante: si algo falla, los botones se habilitan igualmente y
-    // el usuario ve el aviso (antes la vista se quedaba cargando para siempre).
-    await settings.load();
+    // Carga tolerante: si algo falla, los botones se habilitan igualmente y el
+    // usuario ve el aviso. Lo importante es que `loaded` se marque **pase lo que
+    // pase**: si `settings.load()` revienta (en Android puede, porque toca
+    // rutas y servicios que no existen), antes se salía de la función sin pasar
+    // por el `finally` y los botones —«Probar conexión», «Guardar»— se quedaban
+    // deshabilitados para siempre.
     try {
-      const [detected, info, defaultDir, hasTray] = await Promise.all([
+      await settings.load();
+      const [detected, info, defaultDir, hasTray, ownFolders] = await Promise.all([
         detectBrowsers(),
         engineInfo(),
         defaultDownloadDir(),
         trayAvailable(),
+        isAndroid() ? appFolders() : Promise.resolve([]),
       ]);
       browsers = detected;
       engine = info;
       systemDir = defaultDir;
       trayOk = hasTray;
+      androidFolders = ownFolders;
       if (!settings.value.cookiesBrowser && detected.length > 0) {
         settings.value.cookiesBrowser = detected[0].id;
       }
@@ -135,12 +191,12 @@
     }
   }
 
-  async function testConnection() {
-    testing = true;
+  async function testConnection(url: string) {
+    testing = url === TEST_URL_YOUTUBE ? "youtube" : "no-cookies";
     testResult = null;
     try {
       await settings.save();
-      const info = await probeUrl(TEST_URL);
+      const info = await probeUrl(url);
       testResult = {
         ok: true,
         message: `Funciona: "${info.title}" (${info.formatsCount} formatos disponibles)`,
@@ -151,7 +207,7 @@
         message: typeof e === "string" ? e : "La prueba falló",
       };
     } finally {
-      testing = false;
+      testing = null;
     }
   }
 
@@ -175,12 +231,18 @@
   <section class="mb-8">
     <h2 class="mb-1 text-sm font-medium text-ink-strong">Cookies</h2>
     <p class="mb-4 text-xs text-ink-muted">
-      YouTube exige verificación anti-bot cada vez más seguido. Con las cookies de tu
-      navegador (sesión iniciada) las descargas funcionan de forma confiable.
+      {#if isAndroid()}
+        YouTube exige verificación anti-bot cada vez más seguido. En Android la única
+        forma de usar tu sesión es un archivo <span class="text-ink">cookies.txt</span>
+        exportado desde el navegador de tu ordenador.
+      {:else}
+        YouTube exige verificación anti-bot cada vez más seguido. Con las cookies de tu
+        navegador (sesión iniciada) las descargas funcionan de forma confiable.
+      {/if}
     </p>
 
     <div class="space-y-2">
-      {#each modes as mode (mode.id)}
+      {#each availableModes as mode (mode.id)}
         <label
           class="flex cursor-pointer items-start gap-3 rounded-lg border px-3.5 py-2.5 transition-colors {settings.value.cookiesMode ===
           mode.id
@@ -333,7 +395,10 @@
       idleLabel="Descargar ffmpeg"
       missingLabel="No hay un ffmpeg que funcione en el sistema"
       autoLabel="Descargar ffmpeg al iniciar si falta"
-      hint="Los builds de ffmpeg pesan ~150 MB. Si ya tienes ffmpeg instalado se respeta el tuyo."
+      hint={isAndroid()
+        ? "ffmpeg va incluido con la aplicación: no hay que descargarlo ni actualizarlo."
+        : "Los builds de ffmpeg pesan ~150 MB. Si ya tienes ffmpeg instalado se respeta el tuyo."}
+      bundled={isAndroid()}
       bind:autoChecked={settings.value.autoDownloadFfmpeg}
       check={checkFfmpegUpdate}
       update={updateFfmpeg}
@@ -346,7 +411,10 @@
       idleLabel="Descargar runtime JS (quickjs)"
       missingLabel="YouTube necesita un runtime JS y no hay ninguno disponible"
       autoLabel="Descargar el runtime JS al iniciar si falta"
-      hint="Es un binario diminuto (~2,5 MB) para resolver los desafíos de YouTube; evita tener que instalar Node.js. Si ya tienes node, deno o bun, se respeta el tuyo."
+      hint={isAndroid()
+        ? "quickjs va incluido con la aplicación: no hay que descargarlo ni actualizarlo."
+        : "Es un binario diminuto (~2,5 MB) para resolver los desafíos de YouTube; evita tener que instalar Node.js. Si ya tienes node, deno o bun, se respeta el tuyo."}
+      bundled={isAndroid()}
       bind:autoChecked={settings.value.autoDownloadJsRuntime}
       check={checkJsRuntimeUpdate}
       update={updateJsRuntime}
@@ -421,35 +489,61 @@
     </p>
 
     <span class="mb-1 block text-xs text-ink-muted">Carpeta de destino</span>
-    <div class="flex flex-wrap gap-2">
-      <input
-        type="text"
-        readonly
+    {#if isAndroid()}
+      <!-- En Android no se ofrece el selector del sistema: devuelve un
+           `content://` que el motor de descarga no puede usar como carpeta. Se
+           eligen las carpetas propias de la app, que sí son rutas reales y no
+           piden permisos. -->
+      <select
         value={settings.value.downloadDir ?? ""}
-        placeholder={systemDir
-          ? `Sistema · ${systemDir}`
-          : "Carpeta de Descargas del sistema"}
         aria-label="Carpeta de destino de las descargas"
-        class="tap min-w-0 flex-1 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
-      />
-      <button
-        class="tap rounded-lg border border-line px-3 text-sm text-ink-strong transition-colors hover:bg-surface"
-        onclick={chooseFolder}
+        class="tap w-full rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none focus:border-accent"
+        onchange={(event) => {
+          const value = event.currentTarget.value;
+          settings.value.downloadDir = value || null;
+        }}
       >
-        Elegir…
-      </button>
-      {#if settings.value.downloadDir}
+        <option value="">Predeterminada</option>
+        {#each androidFolders as folder (folder)}
+          <option value={folder}>{shortFolder(folder)}</option>
+        {/each}
+      </select>
+      <p class="mt-1.5 text-[11px] text-ink-faint">
+        El vídeo o audio terminado se copia a la galería del teléfono, así que lo
+        verás en tu app de Fotos o de Música. Esta carpeta solo decide dónde se
+        prepara la descarga mientras llega.
+      </p>
+    {:else}
+      <div class="flex flex-wrap gap-2">
+        <input
+          type="text"
+          readonly
+          value={settings.value.downloadDir ?? ""}
+          placeholder={systemDir
+            ? `Sistema · ${systemDir}`
+            : "Carpeta de Descargas del sistema"}
+          aria-label="Carpeta de destino de las descargas"
+          class="tap min-w-0 flex-1 rounded-lg border border-line bg-surface/50 px-3 py-2 text-sm text-ink outline-none placeholder:text-ink-faint focus:border-accent"
+        />
         <button
-          class="tap rounded-lg border border-line px-3 text-sm text-ink-soft transition-colors hover:bg-surface hover:text-ink"
-          onclick={() => (settings.value.downloadDir = null)}
+          class="tap rounded-lg border border-line px-3 text-sm text-ink-strong transition-colors hover:bg-surface"
+          onclick={chooseFolder}
         >
-          Usar la del sistema
+          Elegir…
         </button>
-      {/if}
-    </div>
-    <p class="mt-1.5 text-[11px] text-ink-faint">
-      Se crea si no existe. Se aplica a las descargas nuevas.
-    </p>
+        {#if settings.value.downloadDir}
+          <button
+            class="tap rounded-lg border border-line px-3 text-sm text-ink-soft transition-colors hover:bg-surface hover:text-ink"
+            onclick={() => (settings.value.downloadDir = null)}
+          >
+            Usar la del sistema
+          </button>
+        {/if}
+      </div>
+      <p class="mt-1.5 text-[11px] text-ink-faint">
+        Se crea si no existe. Se aplica a las descargas nuevas.
+      </p>
+    {/if}
 
     <div class="mt-4 space-y-3">
       <label class="tap flex cursor-pointer items-start gap-3">
@@ -509,15 +603,24 @@
   <section class="mb-8">
     <h2 class="mb-1 text-sm font-medium text-ink-strong">Probar configuración</h2>
     <p class="mb-3 text-xs text-ink-muted">
-      Analiza un video de prueba en YouTube usando la configuración actual.
+      Analiza un video de prueba para comprobar que el motor responde. La prueba
+      de YouTube necesita cookies; la otra no, así que sirve para distinguir un
+      problema de cookies de uno de conexión.
     </p>
-    <div class="flex items-center gap-3">
+    <div class="flex flex-wrap items-center gap-3">
       <button
         class="tap rounded-md bg-accent px-3.5 py-1.5 text-sm font-medium text-accent-ink shadow-sm shadow-accent/30 transition-colors hover:bg-accent-hover disabled:opacity-50"
-        disabled={testing || !loaded}
-        onclick={testConnection}
+        disabled={testing !== null || !loaded}
+        onclick={() => testConnection(TEST_URL_YOUTUBE)}
       >
-        {testing ? "Probando…" : "Probar conexión"}
+        {testing === "youtube" ? "Probando…" : "Probar con YouTube"}
+      </button>
+      <button
+        class="tap rounded-md border border-line px-3.5 py-1.5 text-sm font-medium text-ink-strong transition-colors hover:bg-surface disabled:opacity-50"
+        disabled={testing !== null || !loaded}
+        onclick={() => testConnection(TEST_URL_NO_COOKIES)}
+      >
+        {testing === "no-cookies" ? "Probando…" : "Probar sin cookies"}
       </button>
       {#if testResult}
         <p

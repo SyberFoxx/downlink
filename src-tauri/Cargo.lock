@@ -877,6 +877,7 @@ name = "downlink"
 version = "0.10.4"
 dependencies = [
  "jni",
+ "libc",
  "lzma-rs",
  "reqwest 0.12.28",
  "serde",

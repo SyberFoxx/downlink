@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { isAndroid } from "./utils";
 import type {
   BrowserInfo,
   DownloadOptions,
@@ -153,6 +154,12 @@ export function appVersion(): Promise<string> {
 }
 
 export async function pickCookiesFile(): Promise<string | null> {
+  // En Android el selector devuelve un `content://`, y yt-dlp necesita una ruta
+  // de archivo para `--cookies`. El lado nativo copia el archivo elegido a la
+  // carpeta privada y devuelve esa ruta real.
+  if (isAndroid()) {
+    return invoke<string | null>("pick_cookies_file");
+  }
   const selected = await open({
     multiple: false,
     title: "Selecciona un archivo cookies.txt",
@@ -162,6 +169,11 @@ export async function pickCookiesFile(): Promise<string | null> {
 }
 
 export async function pickWallpaper(): Promise<string | null> {
+  // Igual que con las cookies: el `content://` que devuelve el selector no vale
+  // como ruta, así que en Android la copia la hace el lado nativo.
+  if (isAndroid()) {
+    return invoke<string | null>("pick_wallpaper");
+  }
   const selected = await open({
     multiple: false,
     title: "Selecciona una imagen de fondo",
@@ -185,9 +197,31 @@ export async function pickDownloadFolder(): Promise<string | null> {
   return typeof selected === "string" ? selected : null;
 }
 
+/**
+ * Carpetas propias de la app donde se puede escribir sin permisos (Android).
+ *
+ * El selector de carpetas del sistema **no sirve** aquí: devuelve un
+ * `content://…` que no se puede usar como `current_dir` del proceso de descarga.
+ * Estas sí son rutas de verdad, viven dentro de `Android/data/<paquete>/files/` y
+ * son las únicas donde la app puede escribir sin pedir nada.
+ */
+export function appFolders(): Promise<string[]> {
+  return invoke<string[]>("app_folders");
+}
+
 /** Carpeta de descargas por defecto del sistema. */
 export function defaultDownloadDir(): Promise<string | null> {
   return invoke<string | null>("default_download_dir");
+}
+
+/**
+ * Abre un archivo descargado (solo Android).
+ *
+ * Acepta tanto una ruta real como un `content://` de la galería. En el escritorio
+ * se usa `revealItemInDir`, que no entiende URIs de contenido.
+ */
+export function openFile(path: string): Promise<void> {
+  return invoke<void>("open_file", { path });
 }
 
 /** ¿Está disponible la bandeja del sistema? */
