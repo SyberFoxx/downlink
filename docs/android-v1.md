@@ -166,9 +166,15 @@ Ya hay gating `cfg(desktop)`, pero hay que rematar el caso móvil:
 - `src-tauri/src/lib.rs:7` — `#[cfg(desktop)] mod tray;`
 - `src-tauri/src/lib.rs:275` — `tray::setup` (solo escritorio).
 - `src-tauri/src/lib.rs:302` — cerrar a bandeja (solo escritorio).
-- `src-tauri/src/queue.rs:589` / `:610` / `:637` — notificación y tooltip.
-  En no-escritorio la notificación es **no-op**: en Android hay que activarla y
-  pedir el permiso de notificaciones en tiempo de ejecución.
+- Notificaciones al terminar (`queue.rs::notify_finished`): ya funcionan en Android
+  (el plugin declara `POST_NOTIFICATIONS`); en escritorio se omiten si la ventana
+  tiene el foco, en Android se muestran siempre.
+- **Servicio en primer plano** (`DownloadService.kt` + `foreground.rs`): Android
+  congela o mata un proceso en segundo plano, y con él la descarga. Mientras haya
+  trabajos activos se mantiene un servicio con notificación permanente que muestra
+  el progreso; se retira al quedarse la cola sin nada activo. Requiere
+  `FOREGROUND_SERVICE` y `FOREGROUND_SERVICE_DATA_SYNC` en el manifiesto y
+  `foregroundServiceType="dataSync"` en el servicio (Android 14+).
 
 ### 2.4. Cookies y navegadores
 
@@ -388,8 +394,13 @@ al terminar la descarga (`queue.rs::cleanup_companions`), así que no se acumula
 
 ### Fase E — Notificaciones y ciclo de vida
 
-- [ ] Activar notificaciones en móvil y pedir el permiso.
-- [ ] Gestionar segundo plano (foreground service si se quiere descarga en background).
+- [x] Activar notificaciones en móvil (el plugin ya declara `POST_NOTIFICATIONS`;
+      `notify_finished` ahora avisa también en Android).
+- [x] Gestionar segundo plano: **servicio en primer plano** (`DownloadService.kt`)
+      con notificación permanente que muestra el progreso. Se arranca al empezar
+      la primera descarga y se retira cuando no queda ninguna (`queue.rs::sync_foreground`,
+      que resume la cola en `foreground_summary`). Así la descarga sobrevive a
+      que la app pierda el foco o se apague la pantalla.
 - [ ] Revisar la cola persistente ante el matado de proceso por el sistema.
 
 ### Fase F — Firma y publicación

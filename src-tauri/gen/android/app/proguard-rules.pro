@@ -35,6 +35,9 @@
   public java.lang.String openDownloaded(java.lang.String);
   public void pickWallpaper();
   public void pickCookiesFile();
+  public void startDownloadService(java.lang.String);
+  public void updateDownloadService(java.lang.String, int);
+  public void stopDownloadService();
 }
 
 # `MediaStoreBridge` no es llamado por JNI, pero sus métodos forman la API que
@@ -43,3 +46,7 @@
 -keep class com.ramses.downlink.MediaStoreBridge {
   public *;
 }
+
+# El servicio en primer plano lo arranca Android por su nombre desde el
+# manifiesto; R8 no debe tocarlo ni renombrarlo.
+-keep class com.ramses.downlink.DownloadService { *; }

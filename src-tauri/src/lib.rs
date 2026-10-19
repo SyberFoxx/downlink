@@ -1,4 +1,5 @@
 mod engine;
+mod foreground;
 mod history;
 mod media_store;
 mod queue;
