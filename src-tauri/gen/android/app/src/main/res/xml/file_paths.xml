@@ -2,4 +2,11 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
   <external-path name="my_images" path="." />
   <cache-path name="my_cache_images" path="." />
+  <!--
+    Las descargas viven en `Android/data/<paquete>/files/…` (el único sitio
+    escribible sin permisos), y esa ruta es `external-files-path`, no
+    `external-path`. Sin esta entrada, abrir un archivo todavía no publicado en
+    `MediaStore` fallaba con «Failed to find configured root».
+  -->
+  <external-files-path name="downlink_files" path="." />
 </paths>

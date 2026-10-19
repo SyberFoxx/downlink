@@ -28,11 +28,6 @@ const NORMALIZE_FILTER: &str = "loudnorm=I=-16:TP=-1.5:LRA=11";
 /// autogeneradas que repiten vídeos y pueden ser casi infinitas.
 const RADIO_PLAYLIST_LIMIT: usize = 50;
 
-/// Ruta al ejecutable de yt-dlp (variable de entorno → gestionado → sidecar → PATH).
-pub fn ytdlp_bin() -> PathBuf {
-    engine::ytdlp().0
-}
-
 /// Runtime JS resuelto: nombre legible, valor para `--js-runtimes` y origen.
 pub struct JsRuntime {
     /// Nombre que yt-dlp reconoce ("node", "quickjs"…), para mostrar en Ajustes.
@@ -46,7 +41,8 @@ pub struct JsRuntime {
 ///
 /// 1. `DOWNLINK_JS_RUNTIME` (override manual).
 /// 2. Un runtime del `PATH` (deno, node, bun o quickjs).
-/// 3. La copia **gestionada** de quickjs que descarga la app (no está en el
+/// 3. El quickjs que **viaja dentro del APK** (Android).
+/// 4. La copia **gestionada** de quickjs que descarga la app (no está en el
 ///    `PATH`, así que se le pasa su ruta a yt-dlp).
 ///
 /// Es necesario para resolver los desafíos `n` de YouTube.
@@ -71,6 +67,16 @@ pub fn resolve_js_runtime() -> Option<JsRuntime> {
                 source: engine::Source::System,
             });
         }
+    }
+
+    // En Android solo puede ser este: el sistema no deja ejecutar nada que se
+    // descargue, así que quickjs va compilado dentro de la aplicación.
+    if let Some(path) = engine::bundled(engine::BUNDLED_QUICKJS) {
+        return Some(JsRuntime {
+            name: "quickjs".to_string(),
+            arg: format!("quickjs:{}", path.display()),
+            source: engine::Source::Sidecar,
+        });
     }
 
     if let Some(path) = managed_js_runtime_path() {
@@ -523,9 +529,19 @@ pub(crate) fn friendly_error(stderr: &str) -> String {
     let all = stderr.to_lowercase();
 
     if lower.contains("sign in to confirm") || lower.contains("page needs to be reloaded") {
-        return format!(
-            "YouTube pidió verificación anti-bot. Abre Ajustes y activa «cookies desde el navegador» (con sesión iniciada en YouTube).\n\nDetalle: {raw}"
-        );
+        // El consejo tiene que ser el que de verdad se puede seguir donde corre
+        // la app: en Android no existe «cookies desde el navegador» (ver la vista
+        // de Ajustes), así que mandarle ahí era mandarle a un callejón sin salida.
+        return if cfg!(target_os = "android") {
+            format!(
+                "YouTube pidió verificación anti-bot. Abre Ajustes → Cookies y elige «Archivo cookies.txt» \
+                 (expórtalo en el ordenador con la sesión de YouTube iniciada y pásalo al teléfono).\n\nDetalle: {raw}"
+            )
+        } else {
+            format!(
+                "YouTube pidió verificación anti-bot. Abre Ajustes y activa «cookies desde el navegador» (con sesión iniciada en YouTube).\n\nDetalle: {raw}"
+            )
+        };
     }
     if lower.contains("n challenge") || lower.contains("ejs") {
         return format!(
@@ -558,7 +574,7 @@ pub async fn probe(settings: &Settings, url: &str) -> Result<ProbeInfo, String> 
 
     let output = tokio::time::timeout(
         Duration::from_secs(120),
-        engine::command(ytdlp_bin())
+        engine::ytdlp_command()
             .args(&args)
             .stdin(Stdio::null())
             .output(),
@@ -935,7 +951,7 @@ pub fn spawn_process(
 ) -> Result<(Child, ChildStdout, ChildStderr), String> {
     let args = build_download_args(settings, url, options);
 
-    let mut child = engine::command(ytdlp_bin())
+    let mut child = engine::ytdlp_command()
         .args(&args)
         .current_dir(out_dir)
         .stdin(Stdio::null())
@@ -958,16 +974,26 @@ pub fn spawn_process(
 }
 
 /// Versión que reporta el yt-dlp resuelto (`--version`), si se puede ejecutar.
+///
+/// Se pregunta tal y como se lanzaría una descarga: en Android el fichero es un
+/// *zipapp* y lo lee el intérprete de Python que viaja en el APK, así que este
+/// dato también sirve para comprobar que el motor está en condiciones.
 pub async fn ytdlp_version() -> Option<String> {
-    let (path, _) = engine::ytdlp();
-    version_of(&path, "--version").await
+    let output = engine::ytdlp_command()
+        .arg("--version")
+        .stdin(Stdio::null())
+        .output()
+        .await
+        .ok()
+        .filter(|out| out.status.success())?;
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 /// Información del motor para mostrarla en Ajustes.
 pub async fn engine_info() -> EngineInfo {
-    let ytdlp = engine::resolve("yt-dlp", "DOWNLINK_YTDLP");
+    let ytdlp = engine::ytdlp();
     let ytdlp_version = match ytdlp.as_ref() {
-        Some((path, _)) => version_of(path, "--version").await,
+        Some(_) => ytdlp_version().await,
         None => None,
     };
 
@@ -992,18 +1018,6 @@ pub async fn engine_info() -> EngineInfo {
             .as_ref()
             .map(|(_, source)| source.label().to_string()),
     }
-}
-
-/// Ejecuta un binario con un argumento de versión y devuelve su salida limpia.
-async fn version_of(path: &Path, arg: &str) -> Option<String> {
-    engine::command(path)
-        .arg(arg)
-        .stdin(Stdio::null())
-        .output()
-        .await
-        .ok()
-        .filter(|out| out.status.success())
-        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
 /// Versión del ffmpeg resuelto (`-version`), si está instalado y se puede ejecutar.

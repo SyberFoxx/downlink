@@ -19,3 +19,27 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# ---------------------------------------------------------------------------
+# Miembros que Rust llama por JNI *por su nombre*.
+#
+# R8 renombra los métodos en release, y desde Rust se invocan con
+# `env.call_method(activity, "publishToMediaStore", …)`. Si el minificador los
+# renombra, la llamada falla en tiempo de ejecución con `NoSuchMethodError` y
+# —como el error se ignora para no romper la descarga— el síntoma sería que el
+# vídeo nunca aparece en la galería, sin ningún mensaje. De ahí que haya que
+# conservarlos explícitamente.
+# ---------------------------------------------------------------------------
+-keepclassmembers class com.ramses.downlink.MainActivity {
+  public java.lang.String publishToMediaStore(java.lang.String, java.lang.String);
+  public java.lang.String openDownloaded(java.lang.String);
+  public void pickWallpaper();
+  public void pickCookiesFile();
+}
+
+# `MediaStoreBridge` no es llamado por JNI, pero sus métodos forman la API que
+# usa `MainActivity`; se conserva la clase entera por claridad y para que un
+# cambio futuro (llamarla también desde Rust) no dependa de este detalle.
+-keep class com.ramses.downlink.MediaStoreBridge {
+  public *;
+}

@@ -37,6 +37,8 @@ zip = { version = "6", default-features = false, features = ["deflate"] }
 # `src/share.rs`): es la única vía antes de que exista la webview.
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
+# Para `dladdr`: averiguar el directorio de bibliotecas nativas del APK.
+libc = "0.2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

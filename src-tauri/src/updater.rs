@@ -30,6 +30,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::AsyncWriteExt;
+use tokio::process::Command;
 
 use crate::engine::{self, Source};
 use crate::settings::SettingsState;
@@ -275,7 +276,12 @@ fn checksum_for(sums: &str, asset: &str) -> Option<String> {
 
 /// Ejecuta `bin <arg>` y devuelve `None` si no arranca o no imprime nada.
 async fn probe_binary(bin: &Path, args: &[&str]) -> Option<String> {
-    let output = engine::command(bin)
+    probe_command(engine::command(bin), args).await
+}
+
+/// Ejecuta un comando ya preparado y devuelve su salida si termina bien.
+async fn probe_command(mut command: Command, args: &[&str]) -> Option<String> {
+    let output = command
         .args(args)
         .stdin(Stdio::null())
         .output()
@@ -289,8 +295,15 @@ async fn probe_binary(bin: &Path, args: &[&str]) -> Option<String> {
 }
 
 /// Extrae la versión de yt-dlp (`--version`).
+///
+/// Se lanza como lo lanzaría una descarga: en Android el fichero es un *zipapp*
+/// y lo tiene que leer el intérprete de Python del APK.
 async fn probe_ytdlp(bin: &Path) -> Option<String> {
-    let raw = probe_binary(bin, &["--ignore-config", "--version"]).await?;
+    let raw = probe_command(
+        engine::ytdlp_command_for(bin),
+        &["--ignore-config", "--version"],
+    )
+    .await?;
     Some(raw.lines().next().unwrap_or_default().trim().to_string())
 }
 
@@ -343,6 +356,7 @@ fn ytdlp_asset_for(os: &str, arch: &str) -> Option<&'static str> {
         ("windows", "aarch64") => Some("yt-dlp_arm64.exe"),
         ("linux", "x86_64") => Some("yt-dlp_linux"),
         ("linux", "aarch64") => Some("yt-dlp_linux_aarch64"),
+        ("android", _) => None,
         ("macos", "x86_64") | ("macos", "aarch64") => Some("yt-dlp_macos"),
         _ => None,
     }
@@ -518,6 +532,7 @@ fn ffmpeg_asset_for(os: &str, arch: &str) -> Option<&'static str> {
         ("linux", "aarch64") => Some("ffmpeg-master-latest-linuxarm64-gpl.tar.xz"),
         ("windows", "x86_64") => Some("ffmpeg-master-latest-win64-gpl.zip"),
         ("windows", "aarch64") => Some("ffmpeg-master-latest-winarm64-gpl.zip"),
+        ("android", _) => None,
         _ => None,
     }
 }
@@ -584,6 +599,7 @@ fn ffmpeg_update_available(
 ) -> bool {
     match source {
         None => true,
+        Some(Source::Sidecar) if cfg!(target_os = "android") => false,
         Some(_) if installed_version.is_none() => true,
         Some(Source::Managed) => {
             match (
@@ -600,6 +616,21 @@ fn ffmpeg_update_available(
 
 /// Comprueba si conviene descargar o actualizar la copia gestionada de ffmpeg.
 pub async fn check_ffmpeg() -> Result<UpdateCheck, String> {
+    // En Android el ffmpeg viene **incluido con la aplicación** (viaja junto a los
+    // otros motores en `jniLibs`): no se descarga ni se actualiza por separado, e
+    // igual que quickjs, no hay build de escritorio que instalar. Antes esto se
+    // resolvía como un error («No hay builds de ffmpeg para android»), que se veía
+    // en Ajustes aunque ffmpeg funcionara perfectamente: eso era el «error
+    // ficticio» del actualizador.
+    if cfg!(target_os = "android") {
+        let current = crate::ytdlp::ffmpeg_version().await;
+        return Ok(UpdateCheck {
+            current,
+            latest: None,
+            update_available: false,
+        });
+    }
+
     let client = client()?;
     let asset = ffmpeg_asset_for_platform().ok_or_else(unsupported_ffmpeg)?;
     let json = fetch_text(&client, FFMPEG_RELEASE_API).await?;
@@ -620,6 +651,12 @@ pub async fn check_ffmpeg() -> Result<UpdateCheck, String> {
             .map(|ts| ts.chars().take(10).collect()),
         update_available,
     })
+}
+
+/// Mensaje de «ffmpeg no se descarga aquí» para las plataformas que lo traen
+/// incluido con la aplicación (Android).
+fn bundled_ffmpeg() -> String {
+    "ffmpeg va incluido con la aplicación, no necesita descargarse.".to_string()
 }
 
 fn unsupported_ffmpeg() -> String {
@@ -763,9 +800,26 @@ fn binary_target<'a>(name: &str, out_ffmpeg: &'a Path, out_ffprobe: &'a Path) ->
 /// Descarga e instala la última versión de ffmpeg (ffmpeg + ffprobe).
 pub async fn update_ffmpeg(app: &AppHandle) -> Result<UpdateCheck, String> {
     let _guard = begin_update(&FFMPEG_UPDATING)?;
-    let client = client()?;
 
     emit_phase(app, ENGINE_FFMPEG, UpdatePhase::Checking, None, None);
+    if cfg!(target_os = "android") {
+        // Igual que en `check_ffmpeg`: en Android no hay nada que descargar.
+        let current = crate::ytdlp::ffmpeg_version().await;
+        emit_phase(
+            app,
+            ENGINE_FFMPEG,
+            UpdatePhase::Done,
+            None,
+            Some(bundled_ffmpeg()),
+        );
+        return Ok(UpdateCheck {
+            current,
+            latest: None,
+            update_available: false,
+        });
+    }
+
+    let client = client()?;
     let asset = ffmpeg_asset_for_platform().ok_or_else(|| {
         let message = unsupported_ffmpeg();
         emit_phase(
@@ -932,6 +986,7 @@ fn quickjs_asset_for(os: &str, arch: &str) -> Option<&'static str> {
         ("windows", "x86") => Some("qjs-windows-x86.exe"),
         ("macos", "x86_64") => Some("qjs-darwin-x86_64"),
         ("macos", "aarch64") => Some("qjs-darwin-arm64"),
+        ("android", _) => None,
         _ => None,
     }
 }
@@ -942,6 +997,9 @@ fn quickjs_asset_url(tag: &str, asset: &str) -> String {
 }
 
 fn unsupported_quickjs() -> String {
+    if cfg!(target_os = "android") {
+        return "quickjs va incluido con la aplicación, no necesita descargarse.".to_string();
+    }
     format!(
         "No hay binario de quickjs para {} {}. Usa el node o deno del sistema.",
         std::env::consts::OS,
@@ -981,6 +1039,9 @@ async fn managed_quickjs_version() -> Option<String> {
 
 /// ¿Hay un runtime JS del `PATH` (deno/node/bun/quickjs)?
 fn system_js_runtime_available() -> bool {
+    if cfg!(target_os = "android") {
+        return false;
+    }
     matches!(
         crate::ytdlp::resolve_js_runtime().map(|runtime| runtime.source),
         Some(Source::System)
@@ -999,7 +1060,9 @@ pub async fn check_js_runtime() -> Result<UpdateCheck, String> {
 
     // Un override manual (`DOWNLINK_JS_RUNTIME`) o un runtime del sistema
     // relevan de la copia gestionada.
-    let update_available =
+    let update_available = if cfg!(target_os = "android") {
+        false
+    } else {
         if std::env::var_os("DOWNLINK_JS_RUNTIME").is_some() || system_js_runtime_available() {
             false
         } else {
@@ -1007,7 +1070,8 @@ pub async fn check_js_runtime() -> Result<UpdateCheck, String> {
                 None => true,
                 Some(installed) => is_newer(installed, tag.trim_start_matches('v')),
             }
-        };
+        }
+    };
 
     Ok(UpdateCheck {
         current,
@@ -1186,6 +1250,7 @@ mod tests {
         );
         // BtbN no publica macOS.
         assert_eq!(ffmpeg_asset_for("macos", "aarch64"), None);
+        assert_eq!(ffmpeg_asset_for("android", "aarch64"), None);
     }
 
     #[test]
@@ -1209,6 +1274,7 @@ mod tests {
         );
         assert_eq!(quickjs_asset_for("windows", "aarch64"), None);
         assert_eq!(quickjs_asset_for("solaris", "sparc"), None);
+        assert_eq!(quickjs_asset_for("android", "aarch64"), None);
     }
 
     #[test]

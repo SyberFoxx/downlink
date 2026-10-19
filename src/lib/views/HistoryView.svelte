@@ -4,12 +4,13 @@
   import {
     clearHistory,
     getHistory,
+    openFile,
     removeHistory,
     startDownload,
   } from "$lib/api";
   import { summarizeOptions } from "$lib/options";
   import type { HistoryEntry } from "$lib/types";
-  import { extractError, formatBytes, formatDate } from "$lib/utils";
+  import { extractError, formatBytes, formatDate, isAndroid, revealOrOpen } from "$lib/utils";
 
   interface Props {
     onGoToDownloads: () => void;
@@ -50,7 +51,7 @@
   async function reveal(entry: HistoryEntry) {
     if (!entry.filePath) return;
     try {
-      await revealItemInDir(entry.filePath);
+      await revealOrOpen(entry.filePath, revealItemInDir, openFile);
     } catch (e) {
       errorMessage = extractError(e);
     }
@@ -243,7 +244,7 @@
               </button>
               <button
                 class="tap tap-center rounded-md border border-line p-1.5 text-ink-soft transition-colors hover:border-line-strong hover:text-ink disabled:opacity-40"
-                title="Mostrar en la carpeta"
+                title={isAndroid() ? "Abrir el archivo" : "Mostrar en la carpeta"}
                 disabled={!entry.filePath}
                 onclick={() => reveal(entry)}
               >

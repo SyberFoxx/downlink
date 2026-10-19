@@ -14,6 +14,16 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// Firma de publicación: `keystore.properties` no se versiona (ver `.gitignore`).
+// Si no está, el bloque de release simplemente no firma, en vez de romper la
+// compilación en equipos donde solo se construye en depuración.
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     compileSdk = 37
     namespace = "com.ramses.downlink"
@@ -42,6 +52,14 @@ android {
             optimization {
                enable = true
             }
+            if (keystoreProperties.getProperty("storeFile") != null) {
+                signingConfig = signingConfigs.create("release") {
+                    storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                    storePassword = keystoreProperties.getProperty("storePassword")
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("keyPassword")
+                }
+            }
             proguardFiles(
                 *fileTree(".") {
                   include("**/*.pro")
@@ -56,6 +74,18 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    packaging {
+        jniLibs {
+            // Los motores (ffmpeg, CPython, quickjs) viajan como `lib*.so`, pero
+            // no son bibliotecas para cargar: son ejecutables que hay que
+            // *lanzar*. Android solo deja ejecutar desde `nativeLibraryDir`, y
+            // ahí solo aparecen como ficheros si el instalador los extrae.
+            // Con el valor por defecto de AGP (`useLegacyPackaging = false`,
+            // aplicable desde minSdk 23) se quedan mapeados dentro del APK y no
+            // hay nada en disco que ejecutar. `true` fuerza la extracción.
+            useLegacyPackaging = true
+        }
     }
 }
 

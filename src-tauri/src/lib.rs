@@ -1,5 +1,6 @@
 mod engine;
 mod history;
+mod media_store;
 mod queue;
 mod queue_store;
 mod settings;
@@ -11,11 +12,16 @@ mod tray;
 mod updater;
 mod ytdlp;
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use tauri::WindowEvent;
 use tauri::{Manager, State};
+
+#[cfg(target_os = "android")]
+use jni::JNIEnv;
+#[cfg(target_os = "android")]
+use jni::objects::{JObject, JString};
 
 use history::HistoryState;
 use queue::{JobView, Queue};
@@ -59,6 +65,29 @@ impl SharedLink {
 /// avisar a la interfaz.
 #[cfg(target_os = "android")]
 pub(crate) static APP_HANDLE: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+
+/// Llama `MainActivity` para entregar la carpeta de bibliotecas nativas
+/// (`applicationInfo.nativeLibraryDir`), que es donde el instalador extrae los
+/// motores y el único sitio desde el que Android deja ejecutarlos.
+///
+/// Android recalcula esa ruta en cada instalación, así que la única forma fiable
+/// de conocerla es preguntársela. El lado Kotlin la manda en cuanto arranca la
+/// actividad, antes de que la interfaz pueda pedir una descarga.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_ramses_downlink_MainActivity_pushNativeLibraryDir(
+    mut env: JNIEnv<'_>,
+    _this: JObject<'_>,
+    dir: JString<'_>,
+) {
+    let Ok(dir) = env.get_string(&dir) else {
+        return;
+    };
+    let Ok(dir) = dir.to_str() else {
+        return;
+    };
+    engine::set_bundled_lib_dir(dir.trim());
+}
 
 /// Banderas en tiempo de ejecución para la UX de escritorio.
 struct RuntimeFlags {
@@ -314,6 +343,76 @@ fn default_download_dir(app: tauri::AppHandle) -> Option<String> {
         .map(|path| path.display().to_string())
 }
 
+/// Carpetas propias de la app donde se puede escribir sin permisos (Android).
+///
+/// Existe porque el selector de carpetas del sistema **no sirve** en Android: no
+/// devuelve una ruta, sino un `content://…`, y el motor de descarga necesita una
+/// carpeta real como `current_dir`. Estas son las que Android deja usar sin pedir
+/// permisos: viven bajo `Android/data/<paquete>/files/`.
+///
+/// En el escritorio no se usa (allí el selector del sistema da rutas de verdad),
+/// pero se devuelven las del sistema para no dejar el comando sin respuesta.
+#[tauri::command]
+fn app_folders(app: tauri::AppHandle) -> Vec<String> {
+    let mut folders: Vec<PathBuf> = Vec::new();
+    let path = app.path();
+    // `download_dir` es la que Tauri resuelve por defecto y la que se usaba hasta
+    // ahora; las demás dejan organizar por tipo sin salirse de lo escribible.
+    for candidate in [path.download_dir(), path.video_dir(), path.audio_dir()] {
+        if let Ok(dir) = candidate
+            && !folders.contains(&dir)
+        {
+            folders.push(dir);
+        }
+    }
+    folders
+        .into_iter()
+        .map(|dir| dir.display().to_string())
+        .collect()
+}
+
+/// Abre el selector de imágenes del sistema y devuelve la ruta de la copia
+/// privada de la imagen elegida (Android).
+///
+/// El selector de archivos de Tauri no sirve aquí por partida doble: en Android
+/// devuelve un `content://` y el permiso de lectura sobre él es temporal, así que
+/// el fondo se perdería al reabrir la app. El lado nativo copia la imagen y
+/// devuelve una ruta real.
+#[tauri::command]
+async fn pick_wallpaper() -> Result<Option<String>, String> {
+    #[cfg(target_os = "android")]
+    {
+        tauri::async_runtime::spawn_blocking(media_store::pick_wallpaper)
+            .await
+            .map_err(|e| format!("No se pudo abrir el selector de imágenes: {e}"))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Err("Elegir imagen así solo se usa en Android.".to_string())
+    }
+}
+
+/// Abre el selector de archivos y devuelve la ruta de la copia privada del
+/// `cookies.txt` elegido (Android).
+///
+/// yt-dlp necesita una ruta de archivo para `--cookies`, y el selector de Android
+/// solo da un `content://`: sin copiarlo, las cookies nunca llegarían al motor.
+/// Eso explica que «el problema de las cookies» siguiera igual aunque el archivo
+/// se eligiera bien.
+#[tauri::command]
+async fn pick_cookies_file() -> Result<Option<String>, String> {
+    #[cfg(target_os = "android")]
+    {
+        tauri::async_runtime::spawn_blocking(media_store::pick_cookies_file)
+            .await
+            .map_err(|e| format!("No se pudo abrir el selector de archivos: {e}"))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Err("Elegir archivos así solo se usa en Android.".to_string())
+    }
+}
+
 /// Indica si la bandeja del sistema está disponible (para poder desactivar el
 /// ajuste «cerrar a la bandeja» en la interfaz cuando no lo está).
 #[tauri::command]
@@ -321,6 +420,37 @@ fn tray_available(app: tauri::AppHandle) -> bool {
     app.try_state::<RuntimeFlags>()
         .map(|flags| flags.tray_available.load(Ordering::Relaxed))
         .unwrap_or(false)
+}
+
+/// Abre un archivo descargado con la app que corresponda (Android).
+///
+/// En el escritorio el plugin `opener` ya lo hace bien, así que este comando solo
+/// existe para Android: allí un archivo publicado en la galería se identifica con
+/// un `content://`, y `open_path` de Tauri lo rechaza porque comprueba la ruta
+/// con `metadata()`. Aquí se delega en `MediaStoreBridge`, que lanza el
+/// `ACTION_VIEW` a mano tanto para rutas reales como para URIs de contenido.
+///
+/// Es `async` y el puente se ejecuta en un hilo aparte a propósito: abrir exige
+/// hablar con el hilo principal, y si se hiciera desde el propio hilo principal
+/// (como correría un comando síncrono) este se quedaría esperando su propia
+/// respuesta y no habría forma de abrir nada.
+#[tauri::command]
+async fn open_file(path: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        let abierto = tauri::async_runtime::spawn_blocking(move || media_store::open(&path))
+            .await
+            .unwrap_or(false);
+        if abierto {
+            return Ok(());
+        }
+        Err("No hay ninguna aplicación que pueda abrir este archivo (o ya no está).".to_string())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = path;
+        Err("Abrir archivos así solo se usa en Android.".to_string())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -348,16 +478,17 @@ pub fn run() {
             #[cfg(target_os = "android")]
             let _ = APP_HANDLE.set(app.handle().clone());
 
-            // Bandeja del sistema (desktop).
-            let mut tray_available_flag = false;
+            // Bandeja del sistema (solo escritorio; en móvil no existe).
             #[cfg(desktop)]
-            {
-                if let Err(error) = tray::setup(app.handle()) {
+            let tray_available_flag = match tray::setup(app.handle()) {
+                Ok(()) => true,
+                Err(error) => {
                     eprintln!("No se pudo inicializar la bandeja: {error}");
-                } else {
-                    tray_available_flag = true;
+                    false
                 }
-            }
+            };
+            #[cfg(not(desktop))]
+            let tray_available_flag = false;
             app.manage(RuntimeFlags::new(
                 settings.close_to_tray,
                 tray_available_flag,
@@ -376,16 +507,16 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|_window, _event| {
             #[cfg(desktop)]
-            if let WindowEvent::CloseRequested { api, .. } = event
-                && let Some(flags) = window.try_state::<RuntimeFlags>()
+            if let tauri::WindowEvent::CloseRequested { api, .. } = _event
+                && let Some(flags) = _window.try_state::<RuntimeFlags>()
             {
                 let close_to_tray = flags.close_to_tray.load(Ordering::Relaxed);
                 let tray_available = flags.tray_available.load(Ordering::Relaxed);
-                if close_to_tray && tray_available && window.label() == "main" {
+                if close_to_tray && tray_available && _window.label() == "main" {
                     api.prevent_close();
-                    let _ = window.hide();
+                    let _ = _window.hide();
                 }
             }
         })
@@ -418,6 +549,10 @@ pub fn run() {
             read_wallpaper,
             read_system_palette,
             default_download_dir,
+            app_folders,
+            open_file,
+            pick_wallpaper,
+            pick_cookies_file,
             tray_available
         ])
         .run(tauri::generate_context!())
