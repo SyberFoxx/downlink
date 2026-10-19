@@ -86,7 +86,7 @@ downlink/
 │   └── tauri.conf.json          # Configuración de ventana, bundle e identificador
 ├── docs/
 │   ├── android-v1.md            # Plan y estado del port a Android + ideas post-v1
-│   └── banner.jpeg              # Banner del README
+│   └── download_banner.jpeg     # Banner del README
 └── .github/workflows/
     ├── ci.yml                   # CI: frontend + Rust (ubuntu + windows)
     └── release.yml              # Release: instaladores (deb/rpm/AppImage + MSI/NSIS)

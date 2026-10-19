@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.jpeg" alt="Downlink" width="100%" />
+<img src="docs/download_banner.jpeg" alt="Downlink" width="100%" />
 
 <img src="static/brand/icon.svg" alt="Downlink logo" width="84" height="84" />
 
