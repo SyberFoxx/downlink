@@ -293,6 +293,53 @@ fn cleanup_companions(main_path: &str) {
     }
 }
 
+/// Resume la cola para la notificación del servicio en primer plano.
+///
+/// Devuelve `None` cuando no hay nada activo (y hay que retirar la
+/// notificación), o el texto y el porcentaje que se muestran. Recibe el estado de
+/// cada trabajo como `(activo, terminado, porcentaje, título)` para poder probarlo
+/// sin montar toda la cola.
+///
+/// El porcentaje es la **media** de lo que está activo: con varias descargas, la
+/// barra refleja el conjunto y no solo la primera (que saltaría atrás cada vez
+/// que una termina). El texto nombra la primera descarga activa y, si hay más
+/// esperando, lo dice.
+fn foreground_summary<I>(jobs: I) -> Option<(String, i32)>
+where
+    I: IntoIterator<Item = (bool, bool, Option<f64>, String)>,
+{
+    let mut active = 0usize;
+    let mut pending = 0usize;
+    let mut percent_sum = 0.0f64;
+    let mut first: Option<String> = None;
+    for (is_active, is_finished, percent, title) in jobs {
+        if is_active {
+            active += 1;
+            percent_sum += percent.unwrap_or(0.0);
+            if first.is_none() && !title.trim().is_empty() {
+                first = Some(title);
+            }
+        }
+        if !is_finished {
+            pending += 1;
+        }
+    }
+    if active == 0 {
+        return None;
+    }
+    // Media redondeada de lo activo (los porcentajes van de 0 a 100).
+    let percent = (percent_sum / active as f64).round() as i32;
+    // El título puede no llegar aún (yt-dlp lo resuelve al empezar); si no hay,
+    // se cuenta sin más. Cuando hay varios en cola se añade el total.
+    let base = first.unwrap_or_else(|| format!("{active} descargas"));
+    let text = if pending > active {
+        format!("{base} · {pending} en total")
+    } else {
+        base
+    };
+    Some((text, percent))
+}
+
 impl Queue {
     pub fn new(app: AppHandle, concurrency: usize) -> Self {
         Self {
@@ -359,6 +406,8 @@ impl Queue {
         }
         self.emit().await;
         self.persist().await;
+        // Pausar la última descarga activa debe retirar la notificación.
+        self.sync_foreground().await;
     }
 
     /// Reanuda un trabajo pausado.
@@ -406,6 +455,7 @@ impl Queue {
         }
         self.emit().await;
         self.persist().await;
+        self.sync_foreground().await;
     }
 
     /// Reintenta un trabajo fallido o cancelado conservando sus opciones.
@@ -502,6 +552,9 @@ impl Queue {
         for (id, stdout, stderr) in runners {
             self.clone().run_job(id, stdout, stderr);
         }
+
+        // Arranca el servicio en primer plano (o lo para si ya no hay nada).
+        self.sync_foreground().await;
     }
 
     /// Lee la salida de un trabajo y actualiza su estado.
@@ -585,6 +638,7 @@ impl Queue {
         };
         if should_emit {
             self.emit().await;
+            self.sync_foreground().await;
         }
     }
 
@@ -755,6 +809,38 @@ impl Queue {
         self.pump(settings.clone()).await;
     }
 
+    /// Sincroniza el servicio en primer plano con lo que hay en la cola.
+    ///
+    /// Android mata o congela la app en cuanto pierde el foco, y con ella la
+    /// descarga. Mientras haya algún trabajo activo se mantiene un *foreground
+    /// service* (con su notificación obligatoria, que de paso muestra el
+    /// progreso); cuando no queda ninguno, se retira. Se llama desde los puntos
+    /// donde cambia ese estado —arranque, progreso, fase y cierre— y es
+    /// idempotente: repetir el estado actual no cuesta nada.
+    async fn sync_foreground(&self) {
+        let state = {
+            let inner = self.inner.lock().await;
+            foreground_summary(inner.jobs.iter().map(|job| {
+                (
+                    job.status.is_active(),
+                    job.status.is_finished(),
+                    job.percent,
+                    job.title.clone(),
+                )
+            }))
+        };
+
+        #[cfg(target_os = "android")]
+        {
+            match state {
+                None => crate::foreground::stop(),
+                Some((text, percent)) => crate::foreground::update(&text, percent),
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        let _ = state;
+    }
+
     /// Muestra una notificación del sistema al terminar una descarga (solo si
     /// está activada y la ventana no tiene el foco: si está delante, ya se ve).
     async fn notify_finished(&self, title: String, success: bool) {
@@ -762,29 +848,28 @@ impl Queue {
         if !settings.notify_on_finish {
             return;
         }
+        // En escritorio, si la ventana está delante no hace falta avisar. En
+        // Android la app puede estar en segundo plano sin que `is_focused` lo
+        // diga, así que se avisa siempre: es justo lo que el usuario espera.
         #[cfg(desktop)]
+        if let Some(window) = self.app.get_webview_window("main")
+            && window.is_focused().unwrap_or(false)
         {
-            if let Some(window) = self.app.get_webview_window("main")
-                && window.is_focused().unwrap_or(false)
-            {
-                return;
-            }
-            use tauri_plugin_notification::NotificationExt;
-            let heading = if success {
-                "Descarga completada"
-            } else {
-                "La descarga falló"
-            };
-            let _ = self
-                .app
-                .notification()
-                .builder()
-                .title(heading)
-                .body(title)
-                .show();
+            return;
         }
-        #[cfg(not(desktop))]
-        let _ = (title, success);
+        use tauri_plugin_notification::NotificationExt;
+        let heading = if success {
+            "Descarga completada"
+        } else {
+            "La descarga falló"
+        };
+        let _ = self
+            .app
+            .notification()
+            .builder()
+            .title(heading)
+            .body(title)
+            .show();
     }
 
     /// Guarda en disco los trabajos pendientes (si está activado en Ajustes).
@@ -831,9 +916,64 @@ mod tests {
         view
     }
 
+    /// Sin trabajos activos no hay notificación que mostrar.
     #[test]
-    fn next_queued_ignora_estados_no_pendientes() {
+    fn foreground_sin_activos_no_hay_notificacion() {
         let jobs = vec![
+            (false, true, Some(100.0), "hecho".to_string()),
+            (false, true, Some(0.0), "cancelado".to_string()),
+        ];
+        assert!(foreground_summary(jobs).is_none());
+        assert!(foreground_summary(Vec::new()).is_none());
+    }
+
+    /// Con una sola descarga, el texto es su título y el porcentaje el suyo.
+    #[test]
+    fn foreground_una_descarga_usa_su_titulo() {
+        let jobs = vec![(true, false, Some(42.6), "Un vídeo".to_string())];
+        let (text, percent) = foreground_summary(jobs).expect("hay una activa");
+        assert_eq!(text, "Un vídeo");
+        assert_eq!(percent, 43);
+    }
+
+    /// El porcentaje es la media de lo activo, no el de la primera.
+    #[test]
+    fn foreground_promedia_el_progreso() {
+        let jobs = vec![
+            (true, false, Some(0.0), "A".to_string()),
+            (true, false, Some(100.0), "B".to_string()),
+        ];
+        let (_, percent) = foreground_summary(jobs).expect("hay activas");
+        assert_eq!(percent, 50);
+    }
+
+    /// Si hay más trabajos esperando que activos, se anuncia el total.
+    #[test]
+    fn foreground_anuncia_la_cola() {
+        let jobs = vec![
+            (true, false, Some(10.0), "En curso".to_string()),
+            (false, false, None, "En espera".to_string()),
+        ];
+        let (text, _) = foreground_summary(jobs).expect("hay activas");
+        assert_eq!(text, "En curso · 2 en total");
+    }
+
+    /// Un trabajo activo sin título todavía (yt-dlp no lo ha resuelto) no
+    /// produce un texto vacío.
+    #[test]
+    fn foreground_sin_titulo_no_queda_vacio() {
+        let jobs = vec![
+            (true, false, None, String::new()),
+            (true, false, None, String::new()),
+        ];
+        let (text, percent) = foreground_summary(jobs).expect("hay activas");
+        assert_eq!(text, "2 descargas");
+        // Sin porcentaje conocido las descargas cuentan como 0.
+        assert_eq!(percent, 0);
+    }
+
+    #[test]
+    fn next_queued_ignora_estados_no_pendientes() {        let jobs = vec![
             job(1, JobStatus::Downloading),
             job(2, JobStatus::Done),
             job(3, JobStatus::Queued),

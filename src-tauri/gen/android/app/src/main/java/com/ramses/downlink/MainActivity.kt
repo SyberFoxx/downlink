@@ -149,6 +149,30 @@ class MainActivity : TauriActivity() {
     pushPickedCookies("")
   }
 
+  /**
+   * Arranca el servicio en primer plano para que la descarga no muera al salir
+   * de la app. Lo llama Rust cuando empieza la primera descarga.
+   */
+  @Suppress("unused")
+  fun startDownloadService(text: String) {
+    DownloadService.start(this, text)
+  }
+
+  /**
+   * Refresca la notificación de descarga. `percent` va de 0 a 100, o -1 si no se
+   * conoce (barra indeterminada).
+   */
+  @Suppress("unused")
+  fun updateDownloadService(text: String, percent: Int) {
+    DownloadService.update(this, text, percent)
+  }
+
+  /** Retira la notificación cuando ya no queda ninguna descarga. */
+  @Suppress("unused")
+  fun stopDownloadService() {
+    DownloadService.stop(this)
+  }
+
   private external fun pushSharedText(text: String)
   private external fun pushNativeLibraryDir(dir: String)
   private external fun pushPickedWallpaper(path: String)
