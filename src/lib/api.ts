@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { isAndroid } from "./utils";
 import type {
   BrowserInfo,
@@ -222,6 +223,17 @@ export function defaultDownloadDir(): Promise<string | null> {
  */
 export function openFile(path: string): Promise<void> {
   return invoke<void>("open_file", { path });
+}
+
+/**
+ * Abre un enlace web con el navegador del sistema.
+ *
+ * Se usa el plugin `opener`, que valida la URL antes de lanzarla; sirve tanto en
+ * escritorio como en Android. Solo se llama con enlaces propios (el repositorio,
+ * la licencia), nunca con URLs que venga de fuera.
+ */
+export function openExternal(url: string): Promise<void> {
+  return openUrl(url);
 }
 
 /** ¿Está disponible la bandeja del sistema? */

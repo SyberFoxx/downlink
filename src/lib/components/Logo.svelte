@@ -9,36 +9,19 @@
 </script>
 
 <!--
-  Marca de Downlink: flecha descendente entrando en una bandeja, sobre un
-  cuadrado con el degradado violeta→índigo de la app. Los colores son fijos a
-  propósito (identidad de marca), no siguen al tema elegido.
+  Marca de Downlink: la **imagen original** de la app (`static/brand/icon.svg`),
+  la misma que usan el favicon y los iconos del sistema. Se carga el archivo en
+  vez de duplicar el dibujo en código para que haya una sola fuente de verdad:
+  si se cambia la marca, cambia en todos los sitios a la vez.
+
+  Va con `object-contain` para respetar el cuadrado del icono, y sin sombra ni
+  fondo, así encaja en cualquier sitio donde se ponga.
 -->
-<svg
-  viewBox="0 0 1024 1024"
+<img
+  src="/brand/icon.svg"
   width={size}
   height={size}
-  class="{className} shrink-0"
-  aria-hidden="true"
-  focusable="false"
->
-  <defs>
-    <linearGradient
-      id="downlink-brand"
-      x1="164"
-      y1="120"
-      x2="880"
-      y2="912"
-      gradientUnits="userSpaceOnUse"
-    >
-      <stop offset="0" stop-color="#8b5cf6" />
-      <stop offset="0.52" stop-color="#7c3aed" />
-      <stop offset="1" stop-color="#4338ca" />
-    </linearGradient>
-  </defs>
-  <rect x="52" y="52" width="920" height="920" rx="212" fill="url(#downlink-brand)" />
-  <g fill="none" stroke="#ffffff" stroke-width="92" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M512 268v352" />
-    <path d="m388 500 124 124 124-124" />
-    <path d="M296 748h432" />
-  </g>
-</svg>
+  alt="Downlink"
+  class="{className} shrink-0 object-contain"
+  draggable="false"
+/>
