@@ -172,9 +172,7 @@
           </div>
         </button>
       {/each}
-    </div>
 
-    <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
       {#each [
         "catppuccin-mocha",
         "catppuccin-latte",

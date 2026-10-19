@@ -32,7 +32,7 @@ static RUNNING: AtomicBool = AtomicBool::new(false);
 /// Arranca el servicio con un texto inicial. Solo tiene efecto en Android.
 #[cfg(target_os = "android")]
 pub fn start(text: &str) {
-    call_simple("startDownloadService", text);
+    call_string("startDownloadService", text);
     RUNNING.store(true, Ordering::Relaxed);
 }
 
@@ -76,12 +76,12 @@ pub fn stop() {
     if !RUNNING.swap(false, Ordering::Relaxed) {
         return;
     }
-    call_simple("stopDownloadService", "");
+    call_void("stopDownloadService");
 }
 
 /// Llama a un método `(String) -> void` de `MainActivity` sin esperar resultado.
 #[cfg(target_os = "android")]
-fn call_simple(method: &str, text: &str) {
+fn call_string(method: &str, text: &str) {
     let Some(app) = APP_HANDLE.get() else {
         return;
     };
@@ -101,6 +101,27 @@ fn call_simple(method: &str, text: &str) {
                 "(Ljava/lang/String;)V",
                 &[JValue::Object(&JObject::from(arg))],
             );
+        });
+    });
+}
+
+/// Llama a un método `() -> void` de `MainActivity` sin argumentos ni resultado.
+///
+/// La firma tiene que coincidir **exactamente** con la de Kotlin: pasar un
+/// argumento de más provoca `NoSuchMethodError` en tiempo de ejecución (y mata la
+/// app), aunque el método exista con otro nombre parecido.
+#[cfg(target_os = "android")]
+fn call_void(method: &str) {
+    let Some(app) = APP_HANDLE.get() else {
+        return;
+    };
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let method = method.to_string();
+    let _ = window.with_webview(move |webview| {
+        webview.jni_handle().exec(move |env, activity, _webview| {
+            let _ = env.call_method(activity, &method, "()V", &[]);
         });
     });
 }

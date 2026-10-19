@@ -180,11 +180,12 @@ textarea {
     --nav-height: 65px;
   }
 
-  /* El desenfoque a pantalla completa es caro en GPU móvil y con una pantalla
-     pequeña apenas se aprecia: se desactiva y la capa vuelve a su sitio. */
+  /* El desenfoque se aplica igual que en escritorio: el usuario lo controla con
+     su propio medidor, y quitarlo aquí dejaba ese control sin efecto (parecía
+     roto). Se reduce el margen de la capa, que con la pantalla apaisada no hace
+     falta, para que el `blur` no tenga que trabajar de más. */
   .app-wallpaper {
     inset: 0;
-    filter: none;
   }
 
   /* Objetivos táctiles: nada pulsable baja de 44 px (lo que recomiendan las

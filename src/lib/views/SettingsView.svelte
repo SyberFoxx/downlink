@@ -2,12 +2,14 @@
   import { onMount } from "svelte";
   import {
     appFolders,
+    appVersion,
     checkFfmpegUpdate,
     checkJsRuntimeUpdate,
     checkYtdlpUpdate,
     defaultDownloadDir,
     detectBrowsers,
     engineInfo,
+    openExternal,
     pickCookiesFile,
     pickDownloadFolder,
     probeUrl,
@@ -17,10 +19,16 @@
     updateYtdlp,
   } from "$lib/api";
   import EngineUpdateRow from "$lib/components/EngineUpdateRow.svelte";
+  import Logo from "$lib/components/Logo.svelte";
   import { settings } from "$lib/settings.svelte";
   import { toast } from "$lib/toast.svelte";
   import { extractError, isAndroid } from "$lib/utils";
   import type { BrowserInfo, CookiesMode, EngineInfo, ShareAction } from "$lib/types";
+
+  /** Repositorio del proyecto, para enlazarlo desde «Acerca de». */
+  const REPO_URL = "https://github.com/SyberFoxx/downlink";
+  /** Documentación en línea (el README del repositorio). */
+  const DOCS_URL = `${REPO_URL}#readme`;
 
   /**
    * Prueba que exige cookies: YouTube responde «Sign in to confirm you're not a
@@ -47,6 +55,8 @@
   let systemDir = $state<string | null>(null);
   /** Carpetas propias de la app (Android), donde sí se puede escribir. */
   let androidFolders = $state<string[]>([]);
+  /** Versión del binario, para la sección «Acerca de». */
+  let version = $state("");
 
   /**
    * Nombre corto y legible de una carpeta propia de la app. La ruta completa es
@@ -129,18 +139,21 @@
     // deshabilitados para siempre.
     try {
       await settings.load();
-      const [detected, info, defaultDir, hasTray, ownFolders] = await Promise.all([
-        detectBrowsers(),
-        engineInfo(),
-        defaultDownloadDir(),
-        trayAvailable(),
-        isAndroid() ? appFolders() : Promise.resolve([]),
-      ]);
+      const [detected, info, defaultDir, hasTray, ownFolders, ver] =
+        await Promise.all([
+          detectBrowsers(),
+          engineInfo(),
+          defaultDownloadDir(),
+          trayAvailable(),
+          isAndroid() ? appFolders() : Promise.resolve([]),
+          appVersion().catch(() => ""),
+        ]);
       browsers = detected;
       engine = info;
       systemDir = defaultDir;
       trayOk = hasTray;
       androidFolders = ownFolders;
+      version = ver;
       if (!settings.value.cookiesBrowser && detected.length > 0) {
         settings.value.cookiesBrowser = detected[0].id;
       }
@@ -633,6 +646,103 @@
           {testResult.message}
         </p>
       {/if}
+    </div>
+  </section>
+
+  <!-- Acerca de -->
+  <section class="mb-8">
+    <h2 class="mb-1 text-sm font-medium text-ink-strong">Acerca de</h2>
+    <p class="mb-4 text-xs text-ink-muted">
+      Qué es Downlink, cómo empezar y dónde encontrar más información.
+    </p>
+
+    <div class="rounded-lg border border-line bg-surface/30 px-3.5 py-3.5">
+      <div class="flex items-center gap-3">
+        <Logo size={40} />
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-ink-strong">
+            Downlink{#if version} <span class="text-ink-faint">v{version}</span>{/if}
+          </p>
+          <p class="text-xs text-ink-muted">
+            Descarga vídeo y audio de más de 1800 sitios.
+          </p>
+        </div>
+      </div>
+
+      <!-- Guía rápida -->
+      <ol class="mt-4 space-y-2.5 text-xs text-ink-muted">
+        <li class="flex gap-2.5">
+          <span
+            class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[10px] font-semibold text-accent-soft"
+            >1</span
+          >
+          <span>
+            Pega un enlace en <span class="text-ink-strong">Descargas</span> y
+            pulsa el botón. Si activas la vista previa, antes podrás elegir
+            calidad, formato y carpeta.
+          </span>
+        </li>
+        <li class="flex gap-2.5">
+          <span
+            class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[10px] font-semibold text-accent-soft"
+            >2</span
+          >
+          <span>
+            {#if isAndroid()}
+              Al terminar, el archivo se copia a la <span class="text-ink-strong"
+                >galería del teléfono</span
+              >: lo verás en tu app de Fotos o Música.
+            {:else}
+              Al terminar, el archivo queda en la
+              <span class="text-ink-strong">carpeta de destino</span> que hayas
+              elegido arriba.
+            {/if}
+          </span>
+        </li>
+        <li class="flex gap-2.5">
+          <span
+            class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[10px] font-semibold text-accent-soft"
+            >3</span
+          >
+          <span>
+            Si un sitio (YouTube, Instagram…) pide sesión, importa tu archivo
+            <span class="text-ink-strong">cookies.txt</span> en la sección Cookies.
+            Sin él, esos sitios pueden responder que no te reconoce.
+          </span>
+        </li>
+        <li class="flex gap-2.5">
+          <span
+            class="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[10px] font-semibold text-accent-soft"
+            >4</span
+          >
+          <span>
+            ¿Algo no funciona? Usa <span class="text-ink-strong"
+              >Probar configuración</span
+            >
+            más arriba: el botón «sin cookies» distingue un fallo de conexión de
+            uno de cookies.
+          </span>
+        </li>
+      </ol>
+
+      <!-- Enlaces -->
+      <div class="mt-4 flex flex-wrap gap-2 border-t border-line/70 pt-3.5">
+        <button
+          class="tap rounded-md border border-line px-3 py-1.5 text-xs text-ink-strong transition-colors hover:bg-surface"
+          onclick={() => openExternal(REPO_URL)}
+        >
+          Repositorio en GitHub
+        </button>
+        <button
+          class="tap rounded-md border border-line px-3 py-1.5 text-xs text-ink-strong transition-colors hover:bg-surface"
+          onclick={() => openExternal(DOCS_URL)}
+        >
+          Documentación
+        </button>
+      </div>
+      <p class="mt-2.5 text-[11px] text-ink-faint">
+        Open source (MIT) · potenciado por yt-dlp y ffmpeg
+      </p>
     </div>
   </section>
 
