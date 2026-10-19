@@ -1,10 +1,12 @@
 <div align="center">
 
+<img src="docs/banner.jpeg" alt="Downlink" width="100%" />
+
 <img src="static/brand/icon.svg" alt="Downlink logo" width="84" height="84" />
 
 # Downlink
 
-**Desktop video and audio downloader with a modern interface**
+**Desktop and Android video and audio downloader with a modern interface**
 
 [![CI](https://github.com/SyberFoxx/downlink/actions/workflows/ci.yml/badge.svg)](https://github.com/SyberFoxx/downlink/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -19,9 +21,9 @@
 
 ## What is Downlink?
 
-Downlink is a desktop app (with Android on the way) for downloading video and audio from **over 1800 websites** — YouTube, TikTok, Instagram, X/Twitter, Twitch, Reddit and many more — with a clean, fast interface built for the end user.
+Downlink is an app for **desktop and Android** that downloads video and audio from **over 1800 websites** — YouTube, TikTok, Instagram, X/Twitter, Twitch, Reddit and many more — with a clean, fast interface built for the end user.
 
-Under the hood it uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) and `ffmpeg` as external processes: either the ones already on your system, or copies the app itself downloads and keeps up to date. That gives you always-current site support without giving up a native experience.
+Under the hood it uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) and `ffmpeg` as external processes: either the ones already on your system, or copies the app itself downloads and keeps up to date. On Android both are bundled inside the APK, so it works out of the box. That gives you always-current site support without giving up a native experience.
 
 ### Why Downlink and not something else?
 
@@ -29,7 +31,7 @@ Under the hood it uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) and `ffmpeg` a
 |---|---|---|---|
 | Modern interface (Svelte 5) | ✅ | ❌ (basic web UI) | ⚠️ rough |
 | Desktop (Linux/Windows) | ✅ | ⚠️ via browser | ❌ |
-| Android | 🚧 planned | ❌ | ✅ |
+| Android | ✅ | ❌ | ✅ |
 | Visual format selector | ✅ | ❌ | ⚠️ |
 | One-click presets | ✅ | ❌ | ✅ |
 | Drag-and-drop queue | ✅ | ❌ | ❌ |
@@ -101,8 +103,19 @@ Installers for each version are published automatically to [GitHub Releases](htt
 | Arch · Manjaro · EndeavourOS · CachyOS · Garuda | AppImage | `sudo pacman -S --needed fuse2`, then [the AppImage steps](#appimage-any-distro) |
 | Any other distro (Gentoo, Void, Alpine, Nix…) | AppImage | [the AppImage steps](#appimage-any-distro) |
 | Windows 10 / 11 | `.msi` or `.exe` (NSIS) | install and you're done |
+| **Android 7.0+** (arm64) | `.apk` | install the downloaded APK (see [Android](#android)) |
 
 macOS has no package of its own yet (it's on the [roadmap](#roadmap)); for now you can run it from source with `npm run tauri dev`.
+
+### Android
+
+Each release publishes an **arm64-v8a APK**. Since it isn't distributed through the Play Store, Android will ask you to allow installing apps from your file manager or browser the first time.
+
+1. Download the `downlink-*.apk` from [Releases](https://github.com/SyberFoxx/downlink/releases).
+2. Install it (accept the "unknown sources" prompt if it appears).
+3. Open **Downlink** and paste a link.
+
+yt-dlp, ffmpeg, ffprobe, Python and QuickJS are **bundled inside the APK**, so there is nothing else to install. Finished files are copied to the **device gallery**, where you'll find them in your Photos or Music app; while downloading, a persistent notification keeps the work alive even if you leave the app or turn off the screen.
 
 ### AppImage (any distro)
 
@@ -139,7 +152,7 @@ Installers end up in `src-tauri/target/release/bundle/`. On Linux you need the d
 
 ## Stack
 
-- **[Tauri 2](https://tauri.app)** — native shell and lightweight binary for Linux and Windows (Android on the way)
+- **[Tauri 2](https://tauri.app)** — native shell and lightweight binary for Linux, Windows and Android
 - **[Svelte 5](https://svelte.dev)** + **[SvelteKit](https://kit.svelte.dev)** — reactive interface, no virtual DOM
 - **[Rust](https://www.rust-lang.org)** — backend: download queue, external processes and real-time events
 - **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — download engine (a copy managed by the app, or your own)
@@ -267,11 +280,14 @@ downlink/
 │   │   ├── history.rs       # Persisted history (history.json)
 │   │   ├── settings.rs      # Persisted settings and browser detection
 │   │   ├── theme.rs         # Wallpaper and pywal/wallust palette
-│   │   ├── tray.rs          # System tray icon
+│   │   ├── tray.rs          # System tray icon (desktop)
+│   │   ├── media_store.rs   # Android: publish to the gallery, open files, pick files (JNI)
+│   │   ├── foreground.rs    # Android: foreground service bridge (keep downloads alive)
+│   │   ├── share.rs         # Android: receive shared links
 │   │   └── ytdlp.rs         # yt-dlp arguments, parsing and output
 │   ├── Cargo.toml
 │   └── tauri.conf.json      # Window, bundle and identifier configuration
-├── docs/                    # Extra documentation (Android plan)
+├── docs/                    # Extra documentation (Android plan and status)
 └── .github/workflows/       # CI (Linux + Windows) and release publishing
 ```
 
@@ -341,9 +357,13 @@ downlink/
 - [x] Engine download progress visible from any view, and a cookies guide per browser in the docs (v0.10.3)
 
 ### v1.0 — Android 📱
-- [ ] Port to Tauri 2 mobile (arm64)
-- [ ] Mobile-adapted interface (gestures, bottom navigation, safe areas)
-- [ ] yt-dlp and ffmpeg packaged per architecture (arm64)
+- [x] Port to Tauri 2 mobile (arm64)
+- [x] Mobile-adapted interface (bottom navigation, safe areas, touch targets)
+- [x] yt-dlp, ffmpeg, ffprobe, Python and QuickJS packaged inside the APK (arm64)
+- [x] Finished files published to the device gallery (MediaStore) and openable with the system viewer
+- [x] Background downloads via a foreground service (survives the screen turning off)
+- [x] Wallpaper and cookies picked from the gallery/SAF, copied to private storage
+- [x] Signed release APK with its own keystore
 
 Detailed plan (blockers, adaptations and phases): **[docs/android-v1.md](docs/android-v1.md)**.
 

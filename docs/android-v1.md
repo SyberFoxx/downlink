@@ -7,21 +7,22 @@ fases. Las referencias son del árbol en v0.10.0 (`archivo:línea`).
 - **Fuera de alcance**: **iOS**. La arquitectura de Downlink se apoya en lanzar
   `yt-dlp` y `ffmpeg` como **procesos externos**, y iOS no permite crear
   procesos hijos desde una app. No es un problema de esfuerzo, es de plataforma.
-- **Estado**: fases A y B encaminadas. El armazón móvil está adaptado y medido en
-  navegador; los enlaces compartidos desde otras apps se reciben **de punta a punta**
-  (menú «Compartir» → `MainActivity` → JNI → `SharedLink` → interfaz) y la app ya
-  **construye un APK instalable** (ver 7). Quedan los **gestos** para reordenar la
-  cola, el destino de descargas por SAF y, sobre todo, los **motores nativos**. La
-  duda de fondo —cómo ejecutar el motor— ya está decidida: los intérpretes van dentro
-  del APK y yt-dlp se pone al día solo (5.4).
+- **Estado**: **v1.0 funcional en dispositivo.** Los motores nativos (CPython,
+  ffmpeg, ffprobe, QuickJS, yt-dlp) van dentro del APK y se ejecutan; los archivos
+  terminados se publican en la galería y se abren con el visor del sistema; hay
+  **servicio en primer plano** para que la descarga sobreviva a la pantalla
+  apagada; el fondo de pantalla y las cookies se eligen desde la galería/SAF y se
+  copian al almacenamiento privado; y hay **APK de publicación firmado**. Lo que
+  queda es el **CI de Android** (que el código `#[cfg(android)]` no se rompa sin
+  enterarse) y el pulido que salga de probar en el teléfono.
 
 ## Resumen
 
 | | |
 |---|---|
-| **Bloqueantes** | Ejecutar el motor (W^X: **resuelto** en 5.4; falta empaquetarlo), acceso al almacenamiento (SAF) |
-| **A adaptar** | UI táctil, ventana, bandeja/notificaciones, cookies/navegadores, pywal/fondo, "mostrar en carpeta", CI |
-| **Ya preparado** | Tokens de tema, cola/historial/persistencia, TLS rustls, plugins, iconos Android, frontend estático, andamiaje Android y *share intent* |
+| **Bloqueantes** | Ejecutar el motor (W^X: **resuelto**; empaquetado y funcionando), acceso al almacenamiento (galería **resuelto**) |
+| **A adaptar** | CI de Android (pendiente); resto de la UI táctil **hecho** |
+| **Ya preparado** | Tokens de tema, cola/historial/persistencia, TLS rustls, plugins, iconos Android, frontend estático, andamiaje Android, *share intent* |
 
 La buena noticia: la app está bien separada. **El sistema de temas, el estado y
 la persistencia no se tocan**; lo que falta es la capa de interfaz y el
@@ -405,8 +406,9 @@ al terminar la descarga (`queue.rs::cleanup_companions`), así que no se acumula
 
 ### Fase F — Firma y publicación
 
-- [ ] Firma, `versionCode`/`versionName`, minSdk definitivo.
-- [ ] APK/AAB en `release.yml`.
+- [x] Firma con almacén propio (`downlink-release.keystore`), `versionCode`/`versionName`
+      y minSdk 24.
+- [ ] APK/AAB en `release.yml` (que el CI construya el APK en cada versión).
 
 ---
 
@@ -578,3 +580,32 @@ compilador del NDK en el `PATH`:
 ```sh
 cargo check --target aarch64-linux-android
 ```
+
+---
+
+## 8. Ideas para después de la v1
+
+### 8.1. Playlists de Spotify (investigado, aparcado)
+
+La idea era integrar [spotDL](https://github.com/spotDL/spotify-downloader) para
+descargar música de playlists de Spotify. **Se descartó para la v1**, y conviene
+dejar claro por qué, para no repetir la investigación:
+
+- **spotDL no descarga de Spotify.** Usa la API de Spotify solo para *leer la
+  lista* de canciones y luego **busca cada una en YouTube** y la baja con yt-dlp.
+  No existe (ni es posible) "sacar el audio de Spotify".
+- **Cuesta mucho más de lo que parece**: arrastra ~25 dependencias pesadas
+  (`fastapi`, `uvicorn`, `pydantic`, `rich`, `rapidfuzz`, `syncedlyrics`,
+  `soundcloud-v2`…), varias con partes en C que habría que compilar para arm64; y
+  para leer playlists propias hace falta un *Client ID/Secret* de Spotify, que no
+  se puede incrustar en el APK sin exponerlo.
+- **La alternativa ligera** (si algún día se retoma): leer la lista de la página
+  pública de una playlist —**verificado que funciona sin credenciales**: la página
+  devuelve 200 y trae los títulos/artistas en el HTML, y `api.spotify.com` da 401—
+  y lanzar cada canción como una búsqueda `ytsearch:"Artista - Título"` con el
+  yt-dlp que ya llevamos. Sería el 80 % del valor con el 10 % del coste, sin
+  credenciales y sin motor nuevo.
+
+Riesgo a tener en cuenta si se retoma: el emparejado canción→vídeo no es infalible
+(a veces coge un cover o un directo) y depende de que la página pública de Spotify
+siga siendo legible.
